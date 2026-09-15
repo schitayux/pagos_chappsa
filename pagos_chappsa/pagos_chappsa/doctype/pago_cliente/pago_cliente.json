@@ -1,0 +1,320 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "empresa",
+  "cliente",
+  "nombre_cliente",
+  "col_break_head",
+  "fecha",
+  "no_recibo_manual",
+  "moneda",
+  "estado",
+  "cobrador",
+  "nombre_cobrador",
+  "sec_montos",
+  "monto_recibido",
+  "total_aplicado",
+  "total_creditos_aplicados",
+  "col_break_montos",
+  "excedente",
+  "anticipo_aplicado",
+  "anticipo_disponible",
+  "col_break_montos_2",
+  "total_global",
+  "total_formas_pago",
+  "sec_documentos",
+  "detalle_documentos",
+  "sec_formas_pago",
+  "detalle_formas_pago",
+  "sec_comentarios",
+  "comentarios",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "default": "PC-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Serie",
+   "no_copy": 1,
+   "options": "PC-.YYYY.-",
+   "print_hide": 1,
+   "reqd": 1,
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "empresa",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Empresa",
+   "options": "Company",
+   "remember_last_selected_value": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "cliente",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Cliente",
+   "options": "Customer",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fetch_from": "cliente.customer_name",
+   "fieldname": "nombre_cliente",
+   "fieldtype": "Data",
+   "label": "Nombre del cliente",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Today",
+   "fieldname": "fecha",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Fecha del pago",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "bold": 1,
+   "description": "Número del recibo físico que se le deja al cliente. No se puede repetir.",
+   "fieldname": "no_recibo_manual",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "No. de recibo manual",
+   "no_copy": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "moneda",
+   "fieldtype": "Link",
+   "label": "Moneda",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "default": "Borrador",
+   "fieldname": "estado",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Estado",
+   "no_copy": 1,
+   "options": "Borrador\nValidado\nCancelado",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_montos",
+   "fieldtype": "Section Break",
+   "label": "Montos"
+  },
+  {
+   "bold": 1,
+   "description": "Dinero efectivamente recibido del cliente en este pago.",
+   "fieldname": "monto_recibido",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Monto recibido / a distribuir",
+   "options": "moneda"
+  },
+  {
+   "description": "Suma de los abonos aplicados a documentos de cargo.",
+   "fieldname": "total_aplicado",
+   "fieldtype": "Currency",
+   "label": "Total aplicado a documentos",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "description": "Anticipos y devoluciones del cliente consumidos en este pago.",
+   "fieldname": "total_creditos_aplicados",
+   "fieldtype": "Currency",
+   "label": "Créditos aplicados",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_montos",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Parte del monto recibido que no se aplicó a ningún documento. Queda como anticipo a favor del cliente.",
+   "fieldname": "excedente",
+   "fieldtype": "Currency",
+   "label": "Excedente (anticipo generado)",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "anticipo_aplicado",
+   "fieldtype": "Currency",
+   "label": "Anticipo ya utilizado",
+   "no_copy": 1,
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "anticipo_disponible",
+   "fieldtype": "Currency",
+   "label": "Anticipo disponible",
+   "no_copy": 1,
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_montos_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "bold": 1,
+   "description": "Total aplicado a documentos + excedente. Es el valor global que cubre este pago.",
+   "fieldname": "total_global",
+   "fieldtype": "Currency",
+   "label": "Total global del pago",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "description": "Suma del detalle de formas de pago. Debe coincidir con el monto recibido.",
+   "fieldname": "total_formas_pago",
+   "fieldtype": "Currency",
+   "label": "Total formas de pago",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_documentos",
+   "fieldtype": "Section Break",
+   "label": "Documentos aplicados"
+  },
+  {
+   "fieldname": "detalle_documentos",
+   "fieldtype": "Table",
+   "label": "Detalle de documentos",
+   "options": "Detalle Documento Pago"
+  },
+  {
+   "fieldname": "sec_formas_pago",
+   "fieldtype": "Section Break",
+   "label": "Formas de pago recibidas"
+  },
+  {
+   "fieldname": "detalle_formas_pago",
+   "fieldtype": "Table",
+   "label": "Detalle de formas de pago",
+   "options": "Detalle Forma Pago"
+  },
+  {
+   "fieldname": "sec_comentarios",
+   "fieldtype": "Section Break",
+   "label": "Comentarios"
+  },
+  {
+   "fieldname": "comentarios",
+   "fieldtype": "Small Text",
+   "label": "Comentarios"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Pago Cliente",
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "cobrador",
+   "fieldtype": "Link",
+   "label": "Cobrador",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_standard_filter": 1,
+   "search_index": 1,
+   "description": "Usuario que registró el cobro. Determina la serie del recibo y los permisos aplicados."
+  },
+  {
+   "fetch_from": "cobrador.full_name",
+   "fieldname": "nombre_cobrador",
+   "fieldtype": "Data",
+   "label": "Nombre del cobrador",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-08-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pagos Chappsa",
+ "name": "Pago Cliente",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "no_recibo_manual,cliente,nombre_cliente,fecha,monto_recibido",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "nombre_cliente",
+ "track_changes": 1
+}

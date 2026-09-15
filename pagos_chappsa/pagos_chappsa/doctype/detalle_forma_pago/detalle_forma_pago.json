@@ -1,0 +1,139 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "id_linea",
+  "tipo",
+  "forma_pago",
+  "fecha",
+  "col_break_fp",
+  "no_documento",
+  "banco",
+  "monto",
+  "moneda",
+  "sec_banco",
+  "cuenta_banco",
+  "col_break_banco",
+  "cuenta_contable",
+  "sec_comentario",
+  "comentario"
+ ],
+ "fields": [
+  {
+   "description": "Número correlativo de la línea dentro del pago. Se asigna automáticamente.",
+   "fieldname": "id_linea",
+   "fieldtype": "Int",
+   "label": "ID Línea",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "tipo",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Tipo",
+   "options": "Efectivo\nTransferencia\nCheque\nRetención",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "forma_pago",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Forma de pago",
+   "options": "Mode of Payment"
+  },
+  {
+   "columns": 1,
+   "fieldname": "fecha",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Fecha",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_fp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 2,
+   "depends_on": "eval:doc.tipo != 'Efectivo'",
+   "fieldname": "no_documento",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "No. documento / Referencia"
+  },
+  {
+   "depends_on": "eval:doc.tipo == 'Cheque'",
+   "fieldname": "banco",
+   "fieldtype": "Data",
+   "label": "Banco (emisor)"
+  },
+  {
+   "columns": 2,
+   "fieldname": "monto",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Monto",
+   "options": "moneda",
+   "reqd": 1
+  },
+  {
+   "fieldname": "moneda",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Moneda",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_banco",
+   "fieldtype": "Section Break"
+  },
+  {
+   "depends_on": "eval:['Transferencia','Cheque'].includes(doc.tipo)",
+   "fieldname": "cuenta_banco",
+   "fieldtype": "Link",
+   "label": "Cuenta banco empresa",
+   "options": "Bank Account"
+  },
+  {
+   "fieldname": "col_break_banco",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Cuenta contable ligada a la cuenta bancaria. Se usará al generar el Payment Entry real.",
+   "fetch_from": "cuenta_banco.account",
+   "fieldname": "cuenta_contable",
+   "fieldtype": "Link",
+   "label": "Cuenta contable",
+   "options": "Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_comentario",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "comentario",
+   "fieldtype": "Small Text",
+   "label": "Comentario"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pagos Chappsa",
+ "name": "Detalle Forma Pago",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

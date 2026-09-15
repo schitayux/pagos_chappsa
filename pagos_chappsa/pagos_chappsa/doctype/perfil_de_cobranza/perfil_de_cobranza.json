@@ -1,0 +1,252 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:usuario",
+ "creation": "2026-08-29 00:00:00.000000",
+ "description": "Define qué puede hacer cada cobrador en el módulo de Pagos y sobre qué documentos.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "usuario",
+  "nombre_cobrador",
+  "col_break_id",
+  "habilitado",
+  "serie_recibo",
+  "sec_permisos",
+  "permitir_guardar_borradores",
+  "permitir_validar_pagos",
+  "permitir_reimpresion_recibo",
+  "col_break_permisos",
+  "permitir_cancelar_borradores",
+  "permitir_cancelar_validados",
+  "permitir_eliminar_pagos",
+  "sec_reglas",
+  "permitir_pagos_parciales",
+  "col_break_reglas",
+  "permitir_anticipos",
+  "sec_reportes",
+  "permitir_reporte_recibos",
+  "permitir_estado_cuenta_resumen",
+  "col_break_reportes",
+  "permitir_estado_cuenta_detallado",
+  "sec_empresas",
+  "todas_las_empresas",
+  "empresas",
+  "sec_bodegas",
+  "todas_las_bodegas",
+  "bodegas"
+ ],
+ "fields": [
+  {
+   "fieldname": "usuario",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Usuario cobrador",
+   "options": "User",
+   "reqd": 1,
+   "set_only_once": 1,
+   "unique": 1
+  },
+  {
+   "fetch_from": "usuario.full_name",
+   "fieldname": "nombre_cobrador",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nombre",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_id",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "habilitado",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Habilitado",
+   "description": "Si se desactiva, el usuario no puede registrar pagos aunque tenga el rol."
+  },
+  {
+   "description": "Correlativo propio de este cobrador. Debe llevar almohadillas, por ejemplo <code>REC-JV-.YYYY.-.#####</code>",
+   "fieldname": "serie_recibo",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Serie de recibo",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sec_permisos",
+   "fieldtype": "Section Break",
+   "label": "Permisos sobre el pago"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_guardar_borradores",
+   "fieldtype": "Check",
+   "label": "Permite guardar borradores"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_validar_pagos",
+   "fieldtype": "Check",
+   "label": "Permite validar pagos",
+   "description": "Desactivado = el cobrador solo puede dejar borradores para que otro los valide."
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_reimpresion_recibo",
+   "fieldtype": "Check",
+   "label": "Permite reimprimir recibo"
+  },
+  {
+   "fieldname": "col_break_permisos",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_cancelar_borradores",
+   "fieldtype": "Check",
+   "label": "Permite cancelar borradores"
+  },
+  {
+   "default": "0",
+   "fieldname": "permitir_cancelar_validados",
+   "fieldtype": "Check",
+   "label": "Permite cancelar pagos validados"
+  },
+  {
+   "fieldname": "sec_reglas",
+   "fieldtype": "Section Break",
+   "label": "Reglas de cobro"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_pagos_parciales",
+   "fieldtype": "Check",
+   "label": "Permite pagos parciales",
+   "description": "Desactivado = cada documento se abona completo o no se abona."
+  },
+  {
+   "fieldname": "col_break_reglas",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_anticipos",
+   "fieldtype": "Check",
+   "label": "Permite manejo de anticipos",
+   "description": "Desactivado = no puede dejar excedente ni aplicar créditos del cliente."
+  },
+  {
+   "fieldname": "sec_empresas",
+   "fieldtype": "Section Break",
+   "label": "Empresas que puede cobrar"
+  },
+  {
+   "default": "1",
+   "fieldname": "todas_las_empresas",
+   "fieldtype": "Check",
+   "label": "Todas las empresas"
+  },
+  {
+   "depends_on": "eval:!doc.todas_las_empresas",
+   "fieldname": "empresas",
+   "fieldtype": "Table",
+   "label": "Empresas",
+   "options": "Empresa Cobranza"
+  },
+  {
+   "fieldname": "sec_bodegas",
+   "fieldtype": "Section Break",
+   "label": "Bodegas cuyos documentos puede cobrar",
+   "description": "Solo verá notas de entrega que despachen desde estas bodegas."
+  },
+  {
+   "default": "1",
+   "fieldname": "todas_las_bodegas",
+   "fieldtype": "Check",
+   "label": "Todas las bodegas"
+  },
+  {
+   "depends_on": "eval:!doc.todas_las_bodegas",
+   "fieldname": "bodegas",
+   "fieldtype": "Table",
+   "label": "Bodegas",
+   "options": "Bodega Cobranza"
+  },
+  {
+   "default": "0",
+   "fieldname": "permitir_eliminar_pagos",
+   "fieldtype": "Check",
+   "label": "Permite eliminar pagos",
+   "description": "Borrar definitivamente un pago (borrador o ya cancelado). Apagado por defecto: es irreversible."
+  },
+  {
+   "fieldname": "sec_reportes",
+   "fieldtype": "Section Break",
+   "label": "Reportes que puede consultar"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_reporte_recibos",
+   "fieldtype": "Check",
+   "label": "Recibos emitidos por estado"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_estado_cuenta_resumen",
+   "fieldtype": "Check",
+   "label": "Estado de cuenta — resumen"
+  },
+  {
+   "fieldname": "col_break_reportes",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "permitir_estado_cuenta_detallado",
+   "fieldtype": "Check",
+   "label": "Estado de cuenta — detallado"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-29 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pagos Chappsa",
+ "name": "Perfil de Cobranza",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "nombre_cobrador",
+ "track_changes": 1
+}

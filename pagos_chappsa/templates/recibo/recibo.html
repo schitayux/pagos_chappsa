@@ -1,0 +1,169 @@
+{#- Recibo de Pago — media carta.
+    El CSS vive aparte, en recibo.css, y se inserta abajo con {% include %}.
+    Contexto: `doc` = Pago Cliente validado. -#}
+
+{%- set empresa = frappe.get_cached_doc("Company", doc.empresa) -%}
+{%- set simbolo = frappe.db.get_value("Currency", doc.moneda, "symbol") or doc.moneda -%}
+
+{%- set cargos = doc.detalle_documentos | selectattr("clase", "equalto", "Cargo") | list -%}
+{%- set creditos = doc.detalle_documentos | rejectattr("clase", "equalto", "Cargo") | list -%}
+
+{#- Números internos de las notas/facturas abonadas. Se usa el número interno
+    (custom_numero_nota) cuando existe; si no, el nombre del documento. -#}
+{%- set ns = namespace(numeros=[]) -%}
+{%- for f in cargos -%}
+	{%- set interno = f.referencia or frappe.db.get_value(f.tipo_documento, f.documento, "custom_numero_nota") -%}
+	{%- set ns.numeros = ns.numeros + [interno or f.documento] -%}
+{%- endfor -%}
+
+<style>{% include "pagos_chappsa/templates/recibo/recibo.css" %}</style>
+
+<div class="recibo">
+
+	{% if doc.docstatus == 2 %}<div class="rc-anulado">RECIBO ANULADO</div>{% endif %}
+
+	<table class="rc-encabezado">
+		<tr>
+			<td style="width:55%; vertical-align:middle;">
+				{% if empresa.company_logo %}<img src="{{ empresa.company_logo }}" class="rc-logo">{% endif %}
+				<div class="rc-empresa">
+					{{ empresa.name }}
+					{% if empresa.tax_id %}<small>NIT: {{ empresa.tax_id }}</small>{% endif %}
+				</div>
+			</td>
+			<td style="width:45%; vertical-align:middle;" class="der">
+				<div class="rc-titulo">RECIBO DE PAGO</div>
+				<div class="rc-numero">{{ doc.name }}</div>
+				{% if doc.no_recibo_manual %}
+				<div class="rc-fecha">Recibo manual: <b>{{ doc.no_recibo_manual }}</b></div>
+				{% endif %}
+				<div class="rc-fecha">Fecha: {{ frappe.format(doc.fecha, {"fieldtype": "Date"}) }}</div>
+			</td>
+		</tr>
+	</table>
+
+	<table class="rc-cliente">
+		<tr>
+			<td class="rc-etq">Recibí de</td>
+			<td class="rc-val" colspan="3">{{ doc.nombre_cliente or doc.cliente }}</td>
+		</tr>
+		<tr>
+			<td class="rc-etq">Código</td><td class="rc-val">{{ doc.cliente }}</td>
+			<td class="rc-etq">Moneda</td><td class="rc-val">{{ doc.moneda }}</td>
+		</tr>
+		{% if doc.nombre_cobrador or doc.cobrador %}
+		<tr>
+			<td class="rc-etq">Recibido por</td>
+			<td class="rc-val" colspan="3">{{ doc.nombre_cobrador or doc.cobrador }}</td>
+		</tr>
+		{% endif %}
+	</table>
+
+	{% if ns.numeros %}
+	<div class="rc-bloque">
+		<div class="rc-bloque-tit">Documentos abonados ({{ ns.numeros | length }})</div>
+		<div class="rc-docs">{{ ns.numeros | join(" · ") }}</div>
+	</div>
+	{% endif %}
+
+	{% if cargos %}
+	<div class="rc-bloque">
+		<div class="rc-bloque-tit">Detalle de aplicación</div>
+		<table class="rc-tabla">
+			<thead><tr>
+				<th style="width:24%;">No. interno</th><th style="width:22%;">Documento</th>
+				<th style="width:16%;">Fecha</th>
+				<th class="der" style="width:19%;">Saldo anterior</th><th class="der" style="width:19%;">Abono</th>
+			</tr></thead>
+			<tbody>
+			{% for f in cargos %}
+				<tr>
+					<td>{{ f.referencia or "—" }}</td>
+					<td>{{ f.documento }}</td>
+					<td>{{ frappe.format(f.fecha_documento, {"fieldtype": "Date"}) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.saldo_anterior or 0) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.abono or 0) }}</td>
+				</tr>
+			{% endfor %}
+			{% for f in creditos %}
+				<tr class="rc-credito">
+					<td colspan="3">Crédito aplicado — {{ f.documento }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.saldo_anterior or 0) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.abono or 0) }}</td>
+				</tr>
+			{% endfor %}
+			</tbody>
+		</table>
+	</div>
+	{% endif %}
+
+	<div class="rc-bloque">
+		<div class="rc-bloque-tit">Forma de pago</div>
+		<table class="rc-tabla">
+			<thead><tr>
+				<th style="width:20%;">Tipo</th><th style="width:26%;">Referencia</th>
+				<th style="width:16%;">Fecha</th><th style="width:22%;">Banco / cuenta</th>
+				<th class="der" style="width:16%;">Monto</th>
+			</tr></thead>
+			<tbody>
+			{% for f in doc.detalle_formas_pago %}
+				<tr>
+					<td>{{ f.tipo }}</td>
+					<td>{{ f.no_documento or "—" }}</td>
+					<td>{{ frappe.format(f.fecha, {"fieldtype": "Date"}) }}</td>
+					<td>{{ f.banco or f.cuenta_banco or "—" }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.monto or 0) }}</td>
+				</tr>
+			{% else %}
+				<tr><td colspan="5" class="cen">Aplicación de créditos del cliente (sin efectivo)</td></tr>
+			{% endfor %}
+			</tbody>
+		</table>
+	</div>
+
+	<table class="rc-totales">
+		<tr>
+			<td></td>
+			<td class="rc-t-etq">Aplicado a documentos</td>
+			<td class="rc-t-val">{{ simbolo }} {{ "{:,.2f}".format(doc.total_aplicado or 0) }}</td>
+		</tr>
+		{% if doc.total_creditos_aplicados %}
+		<tr>
+			<td></td>
+			<td class="rc-t-etq">Créditos del cliente aplicados</td>
+			<td class="rc-t-val">({{ simbolo }} {{ "{:,.2f}".format(doc.total_creditos_aplicados) }})</td>
+		</tr>
+		{% endif %}
+		{% if doc.excedente %}
+		<tr>
+			<td></td>
+			<td class="rc-t-etq">Excedente a favor del cliente</td>
+			<td class="rc-t-val">{{ simbolo }} {{ "{:,.2f}".format(doc.excedente) }}</td>
+		</tr>
+		{% endif %}
+		<tr class="rc-total-final">
+			<td></td>
+			<td class="rc-t-etq">TOTAL RECIBIDO</td>
+			<td class="rc-t-val">{{ simbolo }} {{ "{:,.2f}".format(doc.monto_recibido or 0) }}</td>
+		</tr>
+	</table>
+	<div class="rc-letras">Son: {{ frappe.utils.money_in_words(doc.monto_recibido, doc.moneda) }}</div>
+
+	{% if doc.comentarios %}
+	<div class="rc-bloque" style="margin-top:6px;">
+		<div class="rc-bloque-tit">Observaciones</div>
+		<div style="font-size:8pt; padding:3px 5px;">{{ doc.comentarios }}</div>
+	</div>
+	{% endif %}
+
+	<table class="rc-firmas">
+		<tr>
+			<td style="width:50%;"><div class="rc-linea">Recibí conforme<br>{{ doc.nombre_cobrador or doc.cobrador or "" }}</div></td>
+			<td style="width:50%;"><div class="rc-linea">Entregué conforme<br>{{ doc.nombre_cliente or doc.cliente }}</div></td>
+		</tr>
+	</table>
+
+	<div class="rc-pie">
+		{{ empresa.name }} · Recibo {{ doc.name }} · Impreso {{ frappe.utils.format_datetime(frappe.utils.now()) }}
+	</div>
+</div>

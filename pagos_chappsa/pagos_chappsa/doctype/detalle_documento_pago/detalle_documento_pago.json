@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-08-28 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "tipo_documento",
+  "documento",
+  "clase",
+  "fecha_documento",
+  "col_break_doc",
+  "moneda",
+  "valor_original",
+  "abonado_previo",
+  "saldo_anterior",
+  "sec_abono",
+  "abono",
+  "col_break_abono",
+  "saldo",
+  "sec_extra",
+  "referencia",
+  "comentario"
+ ],
+ "fields": [
+  {
+   "default": "Delivery Note",
+   "fieldname": "tipo_documento",
+   "fieldtype": "Link",
+   "label": "Tipo documento",
+   "options": "DocType",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "documento",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Documento",
+   "options": "tipo_documento",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "clase",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Clase",
+   "options": "Cargo\nCrédito",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "fecha_documento",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Fecha documento",
+   "read_only": 1
+  },
+  {
+   "fieldname": "col_break_doc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "moneda",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Moneda",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "valor_original",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Valor original",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "abonado_previo",
+   "fieldtype": "Currency",
+   "label": "Abonado previo",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "columns": 1,
+   "fieldname": "saldo_anterior",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Saldo anterior",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_abono",
+   "fieldtype": "Section Break"
+  },
+  {
+   "columns": 1,
+   "fieldname": "abono",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Abono",
+   "options": "moneda"
+  },
+  {
+   "fieldname": "col_break_abono",
+   "fieldtype": "Column Break"
+  },
+  {
+   "columns": 1,
+   "fieldname": "saldo",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Saldo",
+   "options": "moneda",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sec_extra",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "referencia",
+   "fieldtype": "Data",
+   "label": "Referencia",
+   "read_only": 1
+  },
+  {
+   "fieldname": "comentario",
+   "fieldtype": "Small Text",
+   "label": "Comentario"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-28 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pagos Chappsa",
+ "name": "Detalle Documento Pago",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -242,3 +242,14 @@ app_license = "mit"
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+# ---------------------------------------------------------------------------
+# Seguridad
+#
+# Los pagos heredan la visibilidad de clientes de las reglas NATIVAS del sitio:
+# User Permissions + los permission_query_conditions que registren las otras apps
+# (p. ej. modificaciones_interoptic, que ata Customer.custom_vendedor al Sales
+# Person cuyo custom_user es el usuario). Ver pagos_chappsa/permisos.py.
+# ---------------------------------------------------------------------------
+permission_query_conditions = {
+	"Pago Cliente": "pagos_chappsa.permisos.pago_cliente_query",
+}

@@ -1,0 +1,49 @@
+/* Estado de cuenta — hoja carta.
+
+   Lo inserta www/estado_cuenta.html, así el estilo se edita aquí, aparte del layout.
+
+   OJO: Frappe procesa este archivo como plantilla Jinja, así que NO debe contener
+   las secuencias llave-porcentaje ni llave-llave, ni siquiera dentro de un
+   comentario CSS: Jinja intenta interpretarlas y la página falla al renderizar. */
+
+@page { size: letter; margin: 12mm 10mm; }
+
+body { margin: 0; background: #fff; }
+
+.ec {
+	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: 10pt; color: #111; max-width: 8.5in; margin: 0 auto; padding: 10px 14px;
+}
+.ec table { width: 100%; border-collapse: collapse; }
+.ec .der { text-align: right; }
+.ec .cen { text-align: center; }
+
+.ec-encabezado { border-bottom: 1.5pt solid #111; padding-bottom: 6px; margin-bottom: 10px; }
+.ec-logo { max-height: 60px; max-width: 210px; }
+.ec-empresa { font-size: 11pt; font-weight: bold; text-transform: uppercase; }
+.ec-empresa small { display: block; font-weight: normal; font-size: 8pt; color: #444; }
+.ec-titulo { font-size: 15pt; font-weight: bold; letter-spacing: .5px; }
+.ec-sub { font-size: 9pt; color: #333; }
+
+.ec-filtros { font-size: 8.5pt; color: #444; background: #f5f5f5; border: .5pt solid #ddd;
+              padding: 5px 8px; margin-bottom: 10px; border-radius: 4px; }
+
+.ec-tabla { font-size: 8.5pt; }
+.ec-tabla th { background: #eee; border-bottom: 1pt solid #999; padding: 4px 5px; text-align: left;
+               font-size: 8pt; text-transform: uppercase; }
+.ec-tabla td { border-bottom: .4pt dotted #bbb; padding: 3.5px 5px; }
+.ec-tabla tbody tr:nth-child(even) td { background: #fafafa; }
+.ec-cliente-fila td { background: #eef4ff !important; font-weight: bold; border-top: .8pt solid #99b; }
+.ec-anticipo td { color: #0b6b3a; font-weight: 600; }
+
+.ec-total-fila td { border-top: 1.2pt solid #111; border-bottom: 2.5pt double #111;
+                    font-weight: bold; font-size: 10pt; padding-top: 5px; }
+
+.ec-pie { margin-top: 14px; text-align: center; font-size: 7.5pt; color: #666;
+          border-top: .4pt solid #ddd; padding-top: 5px; }
+.ec-vacio { padding: 30px; text-align: center; color: #666; font-style: italic; }
+
+@media print { .ec-noprint { display: none !important; } }
+.ec-noprint { margin-bottom: 12px; text-align: right; }
+.ec-btn { background: #1a4fa0; color: #fff; border: 0; padding: 7px 16px; border-radius: 5px;
+          font-size: 12px; cursor: pointer; }

@@ -1,0 +1,129 @@
+{%- set titulo = "Estado de Cuenta — Resumen" if es_resumen else "Estado de Cuenta — Detallado" -%}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{ titulo }}</title>
+	<style>{% include "pagos_chappsa/templates/estado_cuenta/estado_cuenta.css" %}</style>
+</head>
+<body>
+<div class="ec">
+
+	<div class="ec-noprint">
+		<button class="ec-btn" onclick="window.print()">🖨️ Imprimir</button>
+	</div>
+
+	<table class="ec-encabezado">
+		<tr>
+			<td style="width:55%; vertical-align:middle;">
+				{% if empresa_doc %}
+					{% if empresa_doc.company_logo %}<img src="{{ empresa_doc.company_logo }}" class="ec-logo">{% endif %}
+					<div class="ec-empresa">
+						{{ empresa_doc.name }}
+						{% if empresa_doc.tax_id %}<small>NIT: {{ empresa_doc.tax_id }}</small>{% endif %}
+					</div>
+				{% else %}
+					<div class="ec-empresa">Todas las empresas</div>
+				{% endif %}
+			</td>
+			<td style="width:45%; vertical-align:middle;" class="der">
+				<div class="ec-titulo">{{ titulo }}</div>
+				<div class="ec-sub">
+					{% if hasta %}Saldos al {{ frappe.format(hasta, {"fieldtype": "Date"}) }}{% endif %}
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<div class="ec-filtros">
+		<b>Cliente:</b> {{ filtro_cliente or "todos" }} &nbsp;·&nbsp;
+		<b>Empresa:</b> {{ filtro_empresa or "todas" }} &nbsp;·&nbsp;
+		<b>Moneda:</b> {{ filtro_moneda or "todas" }} &nbsp;·&nbsp;
+		<b>Líneas:</b> {{ filas | length }}
+		{% if monedas_mixtas %}
+		<br><b style="color:#b00020;">Atención:</b> hay más de una moneda en este listado; los totales no son comparables entre sí.
+		{% endif %}
+	</div>
+
+	{% if not filas %}
+		<div class="ec-vacio">No hay saldos pendientes con los filtros indicados.</div>
+	{% elif es_resumen %}
+		<table class="ec-tabla">
+			<thead><tr>
+				<th style="width:45px;">#</th>
+				<th>Cliente</th>
+				<th style="width:70px;">Moneda</th>
+				<th class="der" style="width:110px;">Total</th>
+				<th class="der" style="width:110px;">Abonado</th>
+				<th class="der" style="width:110px;">Diferencia</th>
+			</tr></thead>
+			<tbody>
+			{% for f in filas %}
+				<tr>
+					<td>{{ f.linea }}</td>
+					<td>{{ f.nombre_cliente }}</td>
+					<td>{{ f.moneda }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.total) }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.abonado) }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.diferencia) }}</td>
+				</tr>
+			{% endfor %}
+				<tr class="ec-total-fila">
+					<td colspan="3" class="der">TOTALES</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(total) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(abonado) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(diferencia) }}</td>
+				</tr>
+			</tbody>
+		</table>
+	{% else %}
+		<table class="ec-tabla">
+			<thead><tr>
+				<th style="width:40px;">#</th>
+				<th style="width:150px;">Cliente</th>
+				<th style="width:110px;">Orden de trabajo</th>
+				<th style="width:110px;">Nota de entrega</th>
+				<th style="width:80px;">No. interno</th>
+				<th style="width:80px;">Fecha</th>
+				<th class="der" style="width:95px;">Total</th>
+				<th class="der" style="width:95px;">Abono</th>
+				<th class="der" style="width:95px;">Saldo</th>
+			</tr></thead>
+			<tbody>
+			{%- set ns = namespace(cliente=None) -%}
+			{% for f in filas %}
+				{% if f.cliente != ns.cliente %}
+					{%- set ns.cliente = f.cliente -%}
+					<tr class="ec-cliente-fila"><td colspan="9">{{ f.nombre_cliente }} ({{ f.moneda }})</td></tr>
+				{% endif %}
+				<tr {% if f.clase == "Anticipo" %}class="ec-anticipo"{% endif %}>
+					<td>{{ f.linea }}</td>
+					<td>{{ f.nombre_cliente }}</td>
+					{# La orden de trabajo solo se arma si la nota realmente la trae. #}
+					<td>{{ f.orden_trabajo or "" }}</td>
+					<td>{{ f.documento }}{% if f.clase == "Anticipo" %} <small>(anticipo)</small>{% endif %}</td>
+					<td>{{ f.numero_interno or "" }}</td>
+					<td>{{ frappe.format(f.fecha, {"fieldtype": "Date"}) }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.total) }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.abono) }}</td>
+					<td class="der">{{ "{:,.2f}".format(f.saldo) }}</td>
+				</tr>
+			{% endfor %}
+				<tr class="ec-total-fila">
+					<td colspan="6" class="der">TOTALES</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(total) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(abonado) }}</td>
+					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(diferencia) }}</td>
+				</tr>
+			</tbody>
+		</table>
+	{% endif %}
+
+	<div class="ec-pie">
+		{{ empresa_doc.name if empresa_doc else "" }} ·
+		Impreso por {{ impreso_por }} el {{ frappe.utils.format_datetime(frappe.utils.now()) }}
+	</div>
+</div>
+</body>
+</html>

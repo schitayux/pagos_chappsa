@@ -1,0 +1,78 @@
+/* Recibo de pago — media carta (5.5in x 8.5in).
+
+   Este archivo lo inserta recibo.html, de modo que el estilo se edita aquí, aparte
+   del layout, y no hay que tocar el registro Print Format.
+
+   OJO: Frappe procesa este archivo como plantilla Jinja, así que NO debe contener
+   las secuencias llave-porcentaje ni llave-llave, ni siquiera dentro de un
+   comentario CSS: Jinja intenta interpretarlas y el recibo falla al renderizar. */
+
+@page {
+	size: 5.5in 8.5in;
+	margin: 8mm 8mm 8mm 8mm;
+}
+
+.recibo {
+	width: 100%;
+	font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-size: 9pt;
+	color: #111;
+	line-height: 1.35;
+}
+
+.recibo table { width: 100%; border-collapse: collapse; }
+.recibo .der { text-align: right; }
+.recibo .cen { text-align: center; }
+
+/* Encabezado: logo de la empresa a la izquierda, datos del recibo a la derecha */
+.rc-encabezado { border-bottom: 1.5pt solid #111; padding-bottom: 5px; margin-bottom: 8px; }
+.rc-logo { max-height: 52px; max-width: 170px; }
+.rc-empresa { font-size: 10pt; font-weight: bold; text-transform: uppercase; }
+.rc-empresa small { display: block; font-weight: normal; font-size: 7.5pt; color: #444; }
+
+.rc-titulo { font-size: 12pt; font-weight: bold; letter-spacing: .5px; }
+.rc-numero { font-size: 13pt; font-weight: bold; color: #b00020; }
+.rc-fecha { font-size: 8.5pt; color: #333; }
+
+/* Datos del cliente */
+.rc-cliente { margin-bottom: 8px; }
+.rc-cliente td { padding: 1.5px 0; }
+.rc-etq { color: #555; width: 78px; font-size: 8pt; text-transform: uppercase; }
+.rc-val { font-weight: bold; }
+
+/* Bloques con título */
+.rc-bloque { margin-bottom: 8px; }
+.rc-bloque-tit {
+	font-size: 8pt; font-weight: bold; text-transform: uppercase; letter-spacing: .4px;
+	background: #eee; padding: 2.5px 5px; border-left: 3px solid #111;
+}
+
+/* Tablas de detalle */
+.rc-tabla { font-size: 8pt; margin-top: 3px; }
+.rc-tabla th { border-bottom: .8pt solid #999; padding: 2.5px 3px; text-align: left; font-size: 7.5pt;
+               text-transform: uppercase; color: #333; }
+.rc-tabla td { border-bottom: .4pt dotted #bbb; padding: 2.5px 3px; }
+.rc-credito { color: #0b6b3a; font-weight: bold; }
+
+/* Documentos concatenados */
+.rc-docs { font-size: 8.5pt; word-break: break-word; padding: 4px 5px; background: #f7f7f7;
+           border: .4pt solid #ddd; }
+
+/* Totales */
+.rc-totales { margin-top: 6px; }
+.rc-totales td { padding: 2px 4px; font-size: 9pt; }
+.rc-totales .rc-t-etq { text-align: right; color: #333; }
+.rc-totales .rc-t-val { text-align: right; font-weight: bold; width: 95px; }
+.rc-total-final td { border-top: 1.2pt solid #111; border-bottom: 2.5pt double #111;
+                     font-size: 11pt; font-weight: bold; padding-top: 4px; }
+.rc-letras { font-size: 8pt; font-style: italic; color: #333; margin-top: 3px; }
+
+/* Firmas */
+.rc-firmas { margin-top: 26px; }
+.rc-firmas td { text-align: center; font-size: 7.5pt; color: #333; padding: 0 8px; }
+.rc-linea { border-top: .8pt solid #111; padding-top: 2.5px; }
+
+.rc-pie { margin-top: 10px; text-align: center; font-size: 7pt; color: #666;
+          border-top: .4pt solid #ddd; padding-top: 4px; }
+.rc-anulado { color: #b00020; font-weight: bold; font-size: 11pt; text-align: center;
+              border: 1.5pt solid #b00020; padding: 3px; margin-bottom: 6px; }
