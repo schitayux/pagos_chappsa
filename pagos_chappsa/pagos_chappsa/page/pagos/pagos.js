@@ -105,6 +105,15 @@ class PagosPanel {
 				.pg-cuenta { cursor:pointer; padding:6px 12px; border:1px solid var(--border-color);
 				             border-radius:20px; font-size:12px; background:var(--bg-color); }
 				.pg-cuenta.activa { background:var(--blue-500); color:#fff; border-color:var(--blue-500); font-weight:600; }
+				.pg-prestamo { cursor:pointer; padding:6px 14px; border:2px solid var(--orange-500); border-radius:20px;
+				                font-size:12px; font-weight:700; color:var(--orange-700, #9c4221); background:#fffaf0; }
+				.pg-prestamo.abierto { background:var(--orange-500); color:#fff; }
+				.pg-pivot td, .pg-pivot th { padding:4px 8px !important; white-space:nowrap; }
+				.pg-pivot th { background:var(--subtle-fg); }
+				.pg-pivot .num { text-align:right; }
+				.pg-pivot tfoot td { font-weight:700; background:var(--subtle-fg); }
+				.pg-grupo { padding:6px 14px; border:2px solid var(--green-600); border-radius:20px; font-size:12px;
+				            font-weight:700; color:var(--green-700); background:var(--green-50, #f0fff4); cursor:default; }
 				.pg-metrica-valor { font-size:17px; font-weight:700; }
 				.pg-metrica-tit { font-size:10px; text-transform:uppercase; letter-spacing:.4px; }
 				.pg-seccion { padding:12px; border:1px solid var(--border-color); border-radius:10px; }
@@ -137,6 +146,7 @@ class PagosPanel {
 						</div>
 					</div>
 					<div id="pg_cuentas" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
+					<div id="pg_prestamos" style="margin-top:10px;"></div>
 					<div style="margin-top:10px;">
 						<button class="btn btn-default btn-sm" id="pg_btn_limpiar_todo">🧹 Limpiar datos generales</button>
 					</div>
@@ -622,12 +632,14 @@ class PagosPanel {
 
 	render_cuentas() {
 		const $c = this.$body.find("#pg_cuentas");
+		this.revisar_prestamos();
 		if (this.cuentas.length <= 1) {
 			$c.html(
-				this.cuentas.length === 1
-					? `<span class="text-muted" style="font-size:11px;">Cuenta: <b>${frappe.utils.escape_html(this.cuentas[0].abbr)}</b> · ${this.cuentas[0].moneda}</span>`
-					: ""
+				(this.cuentas.length === 1
+					? `<span class="text-muted" style="font-size:11px; align-self:center;">Cuenta: <b>${frappe.utils.escape_html(this.cuentas[0].abbr)}</b> · ${this.cuentas[0].moneda}</span>`
+					: "") + this.html_kpi_prestamos()
 			);
+			this.enlazar_kpi_prestamos($c);
 			return;
 		}
 
@@ -642,13 +654,141 @@ class PagosPanel {
 							<span style="opacity:.75;">(${c.documentos})</span>
 						</span>`;
 					})
-					.join("")
+					.join("") +
+				this.render_total_grupo() +
+				this.html_kpi_prestamos()
 		);
+		this.enlazar_kpi_prestamos($c);
 
 		$c.find(".pg-cuenta").on("click", (e) => {
 			const $el = $(e.currentTarget);
 			this.seleccionar_cuenta($el.data("empresa"), $el.data("moneda"));
 		});
+	}
+
+	// ------------------------------------------------------------------
+	// Préstamos vigentes: stock prestado que sigue en la bodega de préstamo
+	// del cliente. Se consulta una vez por cliente; es independiente del pago.
+	// ------------------------------------------------------------------
+	revisar_prestamos() {
+		const cliente = (this.controles && this.controles.cliente && this.controles.cliente.get_value()) || null;
+		if (cliente === this._prestamos_de) return;
+		this._prestamos_de = cliente;
+		this.prestamos = null;
+		this.prestamos_abierto = false;
+		this.render_prestamos_detalle();
+		if (!cliente) return;
+		frappe.call({
+			method: "pagos_chappsa.api.prestamos.get_prestamos",
+			args: { cliente },
+			callback: (r) => {
+				if (cliente !== this._prestamos_de) return; // llegó tarde: ya cambiaron de cliente
+				this.prestamos = r.message || null;
+				this.render_cuentas();
+			},
+		});
+	}
+
+	html_kpi_prestamos() {
+		const p = this.prestamos;
+		if (!p || !p.totales || !p.totales.length) return "";
+		return p.totales
+			.map(
+				(t) => `<span class="pg-prestamo ${this.prestamos_abierto ? "abierto" : ""}"
+					title="Clic para ver el detalle por transferencia y antigüedad">
+					PRÉSTAMOS - Vigente · ${t.moneda} — ${format_currency(t.total, t.moneda)}
+					<span style="opacity:.8;">(${t.transferencias} transf. · ${t.unidades} u.)</span>
+				</span>`
+			)
+			.join("");
+	}
+
+	enlazar_kpi_prestamos($c) {
+		$c.find(".pg-prestamo").on("click", () => {
+			this.prestamos_abierto = !this.prestamos_abierto;
+			this.render_cuentas();
+			this.render_prestamos_detalle();
+		});
+	}
+
+	render_prestamos_detalle() {
+		const $d = this.$body.find("#pg_prestamos");
+		const p = this.prestamos;
+		if (!this.prestamos_abierto || !p || !p.filas || !p.filas.length) {
+			$d.html("");
+			return;
+		}
+		const esc = frappe.utils.escape_html;
+		const rangos = [
+			["d0_7", "0 - 7 días"],
+			["d8_15", "8 - 15 días"],
+			["d16_30", "16 - 30 días"],
+			["d30_mas", "30+ días"],
+		];
+		const celda = (v, m) => `<td class="num">${flt(v) ? format_currency(v, m) : ""}</td>`;
+		const tablas = p.totales.map((t) => {
+			const filas = p.filas.filter((f) => f.moneda === t.moneda);
+			return `
+				<div style="overflow-x:auto;">
+				<table class="table table-bordered table-sm pg-pivot" style="margin-bottom:6px; font-size:12px;">
+					<thead><tr>
+						<th>No. Transferencia</th><th>Fecha</th><th>Bodega</th><th>Vendedor</th>
+						<th class="num">Unid.</th>
+						${rangos.map(([, l]) => `<th class="num">${l}</th>`).join("")}
+						<th class="num">Total</th>
+					</tr></thead>
+					<tbody>
+						${filas
+							.map(
+								(f) => `<tr>
+							<td><a href="/app/stock-entry/${encodeURIComponent(f.stock_entry)}" target="_blank">${esc(f.stock_entry)}</a></td>
+							<td>${frappe.datetime.str_to_user(f.fecha)} <span class="text-muted">(${f.dias} d)</span></td>
+							<td>${esc(f.bodega || "")}</td>
+							<td>${esc(f.vendedor || "")}</td>
+							<td class="num">${f.unidades}</td>
+							${rangos.map(([k]) => celda(f[k], f.moneda)).join("")}
+							<td class="num"><b>${format_currency(f.total, f.moneda)}</b></td>
+						</tr>`
+							)
+							.join("")}
+					</tbody>
+					<tfoot><tr>
+						<td colspan="4">Total préstamos vigentes (${t.moneda})</td>
+						<td class="num">${t.unidades}</td>
+						${rangos.map(([k]) => celda(t[k], t.moneda)).join("")}
+						<td class="num">${format_currency(t.total, t.moneda)}</td>
+					</tr></tfoot>
+				</table>
+				</div>`;
+		});
+		$d.html(`<div class="pg-card" style="border-color:var(--orange-500);">
+			<div style="font-weight:700; margin-bottom:6px;">Préstamos vigentes por transferencia y antigüedad
+				<span class="text-muted" style="font-weight:400; font-size:11px;">— unidades que siguen en la bodega de préstamo del cliente, valor a precio consigna, días desde la creación de la transferencia</span>
+			</div>
+			${tablas.join("")}
+		</div>`);
+	}
+
+	// Total del GRUPO: suma el saldo de todas las empresas, por moneda (no se
+	// mezclan GTQ con HNL/USD). Es informativo, no se puede seleccionar.
+	render_total_grupo() {
+		const por_moneda = {};
+		this.cuentas.forEach((c) => {
+			const g = (por_moneda[c.moneda] = por_moneda[c.moneda] || { saldo: 0, documentos: 0, cuentas: 0 });
+			g.saldo += flt(c.saldo);
+			g.documentos += cint(c.documentos);
+			g.cuentas += 1;
+		});
+		return Object.keys(por_moneda)
+			.filter((m) => por_moneda[m].cuentas > 1)
+			.map((m) => {
+				const g = por_moneda[m];
+				return `<span class="pg-grupo" title="Suma de todas las empresas en ${m}">
+					TOTAL GRUPO · ${m} — ${format_currency(g.saldo, m)}
+					<span style="opacity:.75;">(${g.documentos})</span>
+				</span>`;
+			})
+			.join("");
 	}
 
 	render_resumen() {
