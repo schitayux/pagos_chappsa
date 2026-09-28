@@ -1,38 +1,31 @@
 // =====================================================
-// Página "Pagos" — captura y aplicación de pagos de clientes
+// Página "Pagos a Proveedores" — captura y aplicación de pagos a proveedores
 //
-// Flujo: se elige SOLO el cliente. El sistema busca dónde tiene saldo (empresa +
-// moneda), elige la cuenta con mayor saldo y carga el detalle de inmediato.
-//
-//  Pestaña 1: distribución. Se puede trabajar de dos formas, combinables:
-//             a) escribir el monto recibido -> se reparte de lo más antiguo a lo
-//                más reciente;
-//             b) marcar las notas que el cliente está pagando -> quedan fijas.
-//             Los créditos (anticipos y devoluciones) salen en verde y se
-//             aplican marcándolos.
-//  Pestaña 2: formas de pago (Efectivo / Transferencia / Cheque / Retención).
+// Espejo de la página "Pagos" (pagos.js) de cobranza, adaptada a cuentas por
+// pagar: se elige el PROVEEDOR, el único documento de cargo es la Factura de
+// Compra, y el monto capturado es dinero que la empresa ENTREGA.
 // =====================================================
 
-frappe.pages["pagos"].on_page_load = function (wrapper) {
+frappe.pages["pagos_proveedores"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
-		title: __("Pagos"),
+		title: __("Pagos a Proveedores"),
 		single_column: true,
 	});
-	frappe.pagos_panel = new PagosPanel(page);
+	frappe.pagos_proveedores_panel = new PagosProveedoresPanel(page);
 };
 
-frappe.pages["pagos"].on_page_show = function () {
-	const panel = frappe.pagos_panel;
+frappe.pages["pagos_proveedores"].on_page_show = function () {
+	const panel = frappe.pagos_proveedores_panel;
 	if (panel && panel.$body.find('.nav-link[data-tab="recientes"]').hasClass("active")) {
 		panel.refrescar_recientes();
 	}
 };
 
 const TOL = 0.005;
-const TIPO_ANTICIPO = "Pago Cliente";
+const TIPO_ANTICIPO = "Pago Proveedor";
 
-class PagosPanel {
+class PagosProveedoresPanel {
 	constructor(page) {
 		this.page = page;
 		this.$body = $(page.body);
@@ -69,7 +62,6 @@ class PagosPanel {
 		return format_currency(flt(v), this.moneda || "GTQ");
 	}
 
-	/** Atributo `disabled` cuando el pago está validado (solo lectura). */
 	dis() {
 		return this.solo_lectura ? " disabled" : "";
 	}
@@ -81,12 +73,10 @@ class PagosPanel {
 		return this.solo_lectura || this.solo_anticipo ? " disabled" : "";
 	}
 
-	/** Cuentas contables que el perfil Global configuró para ese tipo de forma de pago. */
 	opciones_cuenta(tipo) {
 		return (this.ctx.cuentas_por_forma || {})[tipo] || [];
 	}
 
-	/** La única cuenta configurada para ese tipo, o null si hay 0 o varias. */
 	cuenta_unica(tipo) {
 		const opciones = this.opciones_cuenta(tipo);
 		return opciones.length === 1 ? opciones[0] : null;
@@ -111,7 +101,6 @@ class PagosPanel {
 				.pg-seccion-tit { font-weight:700; margin-bottom:8px; }
 				.pg-monto-input { height:38px !important; font-size:18px !important; font-weight:700; text-align:right; }
 
-				/* Cada pestaña con su propio color, para ubicarse de un vistazo */
 				.nav-tabs .nav-link { font-weight:600; border-bottom:3px solid transparent; }
 				.nav-tabs .nav-link[data-tab="dist"]        { color:#1a4fa0; }
 				.nav-tabs .nav-link[data-tab="dist"].active { background:#e8f0fe; border-bottom-color:#1a4fa0; }
@@ -129,7 +118,7 @@ class PagosPanel {
 
 				<div class="pg-card">
 					<div style="display:flex; flex-wrap:wrap; gap:12px; align-items:end;">
-						<div id="pg_cliente" style="min-width:340px; flex:1;"></div>
+						<div id="pg_proveedor" style="min-width:340px; flex:1;"></div>
 						<div id="pg_fecha" style="min-width:170px;"></div>
 						<div id="pg_no_recibo" style="min-width:200px;"></div>
 						<div id="pg_tipo_cambio_wrap" style="display:none; min-width:150px;">
@@ -169,15 +158,10 @@ class PagosPanel {
 		this.cargar_contexto();
 	}
 
-	/**
-	 * Habilita/deshabilita los botones de la barra según el estado.
-	 * Regla de flujo: no se valida "de una" — primero hay que dejar el borrador
-	 * guardado, y validar es una segunda acción explícita sobre ese borrador.
-	 */
 	actualizar_acciones() {
 		const p = this.page;
 		const perfil = this.ctx.perfil || {};
-		const hay_cliente = !!this.controles?.cliente?.get_value();
+		const hay_proveedor = !!this.controles?.proveedor?.get_value();
 
 		if (this.solo_lectura) {
 			p.btn_primary?.hide();
@@ -185,7 +169,7 @@ class PagosPanel {
 		} else {
 			p.btn_primary?.show();
 			p.btn_secondary?.show();
-			p.btn_secondary?.prop("disabled", !hay_cliente || this.ctx.puede_crear === false);
+			p.btn_secondary?.prop("disabled", !hay_proveedor || this.ctx.puede_crear === false);
 			const puede = !!this.pago_name && this.ctx.puede_validar !== false;
 			p.btn_primary?.prop("disabled", !puede);
 			p.btn_primary?.attr(
@@ -194,8 +178,6 @@ class PagosPanel {
 			);
 		}
 
-		// Con el pago validado el campo se bloquea: se corrige con el botón de abajo,
-		// que es una acción aparte y explícita.
 		const ctl_recibo = this.controles?.no_recibo;
 		if (ctl_recibo) {
 			ctl_recibo.df.read_only = this.solo_lectura ? 1 : 0;
@@ -207,7 +189,7 @@ class PagosPanel {
 		this.$body.find("#pg_btn_ver_pe").remove();
 		if (this.solo_lectura && this.pago_name_impreso && this.estado_pago !== "Cancelado") {
 			const $e = $(
-				`<button class="btn btn-default btn-sm" id="pg_btn_editar_recibo" style="margin-left:8px;">✏️ Corregir No. de recibo</button>`
+				`<button class="btn btn-default btn-sm" id="pg_btn_editar_recibo" style="margin-left:8px;">✏️ Corregir No. de comprobante</button>`
 			);
 			$e.on("click", () => this.editar_no_recibo(this.pago_name_impreso));
 			this.$body.find("#pg_btn_limpiar_todo").after($e);
@@ -215,7 +197,7 @@ class PagosPanel {
 		let $ancla_pe = this.$body.find("#pg_btn_limpiar_todo");
 		if (this.pago_name_impreso && this.puede_imprimir && perfil.permitir_reimpresion_recibo !== 0) {
 			const $b = $(
-				`<button class="btn btn-default btn-sm" id="pg_btn_imprimir" style="margin-left:8px;">🖨️ Imprimir recibo</button>`
+				`<button class="btn btn-default btn-sm" id="pg_btn_imprimir" style="margin-left:8px;">🖨️ Imprimir comprobante</button>`
 			);
 			$b.on("click", () => this.imprimir_recibo(this.pago_name_impreso));
 			this.$body.find("#pg_btn_limpiar_todo").after($b);
@@ -242,14 +224,13 @@ class PagosPanel {
 		);
 	}
 
-	/** Corrige el No. de recibo de un pago ya validado (el resto queda intacto). */
 	editar_no_recibo(name) {
 		frappe.prompt(
 			[
 				{
 					fieldtype: "Data",
 					fieldname: "no_recibo",
-					label: __("No. de recibo manual"),
+					label: __("No. de comprobante de pago"),
 					reqd: 1,
 					default: this.controles.no_recibo.get_value() || "",
 					description: __("Se validará que no esté usado en otro pago."),
@@ -257,35 +238,35 @@ class PagosPanel {
 			],
 			(valores) => {
 				frappe.call({
-					method: "pagos_chappsa.api.pagos.actualizar_no_recibo",
+					method: "pagos_chappsa.api.pagos_proveedor.actualizar_no_recibo",
 					args: { name, no_recibo: valores.no_recibo },
 					freeze: true,
-					freeze_message: __("Actualizando No. de recibo..."),
+					freeze_message: __("Actualizando No. de comprobante..."),
 					callback: (r) => {
 						if (!r.message) return;
 						this.controles.no_recibo.set_value(r.message.no_recibo_manual);
 						this.controles.no_recibo.refresh();
 						frappe.show_alert({
-							message: __("No. de recibo actualizado a {0}", [r.message.no_recibo_manual]),
+							message: __("No. de comprobante actualizado a {0}", [r.message.no_recibo_manual]),
 							indicator: "green",
 						});
 						this.refrescar_recientes();
 					},
 				});
 			},
-			__("Corregir No. de recibo del pago {0}", [name]),
+			__("Corregir No. de comprobante del pago {0}", [name]),
 			__("Guardar")
 		);
 	}
 
 	imprimir_recibo(name) {
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.registrar_reimpresion",
+			method: "pagos_chappsa.api.pagos_proveedor.registrar_reimpresion",
 			args: { name },
 			callback: (r) => {
 				if (!r.message) return;
 				window.open(
-					"/printview?doctype=" + encodeURIComponent("Pago Cliente") +
+					"/printview?doctype=" + encodeURIComponent("Pago Proveedor") +
 						"&name=" + encodeURIComponent(r.message.name) +
 						"&format=" + encodeURIComponent(r.message.formato) +
 						"&no_letterhead=1",
@@ -300,7 +281,7 @@ class PagosPanel {
 	 * filtrada en vez de adivinar cuál mostrar. */
 	ver_entrada_pago(name) {
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_payment_entries",
+			method: "pagos_chappsa.api.pagos_proveedor.get_payment_entries",
 			args: { name },
 			freeze: true,
 			freeze_message: __("Buscando la entrada de pago..."),
@@ -318,7 +299,7 @@ class PagosPanel {
 					return;
 				}
 				window.open(
-					"/app/payment-entry?custom_pagos_chappsa_pago_cliente=" + encodeURIComponent(name),
+					"/app/payment-entry?custom_pagos_chappsa_pago_proveedor=" + encodeURIComponent(name),
 					"_blank"
 				);
 			},
@@ -352,13 +333,13 @@ class PagosPanel {
 	make_filtros() {
 		this.controles = {};
 
-		this.controles.cliente = this.make_control(this.$body.find("#pg_cliente"), {
+		this.controles.proveedor = this.make_control(this.$body.find("#pg_proveedor"), {
 			fieldtype: "Link",
-			fieldname: "cliente",
-			label: __("Cliente"),
-			options: "Customer",
+			fieldname: "proveedor",
+			label: __("Proveedor"),
+			options: "Supplier",
 			reqd: 1,
-			onchange: () => this.cargar_cliente(),
+			onchange: () => this.cargar_proveedor(),
 		});
 
 		this.controles.fecha = this.make_control(this.$body.find("#pg_fecha"), {
@@ -369,14 +350,12 @@ class PagosPanel {
 		});
 		this.controles.fecha.set_value(frappe.datetime.get_today());
 
-		// Número del recibo físico del talonario que se le deja al cliente.
-		// Obligatorio y sin repetir; el servidor vuelve a validar ambas cosas.
 		this.controles.no_recibo = this.make_control(this.$body.find("#pg_no_recibo"), {
 			fieldtype: "Data",
 			fieldname: "no_recibo_manual",
-			label: __("No. de recibo manual"),
+			label: __("No. de comprobante de pago"),
 			reqd: 1,
-			description: __("Recibo del talonario entregado al cliente."),
+			description: __("Número del comprobante/voucher que respalda este pago."),
 		});
 
 		// Solo se muestra cuando la moneda del pago es distinta a la de la empresa
@@ -386,7 +365,7 @@ class PagosPanel {
 			fieldname: "tipo_cambio",
 			label: __("Tipo de cambio"),
 			precision: 6,
-			description: __("Tipo de cambio real de este cobro."),
+			description: __("Tipo de cambio real de este pago."),
 			onchange: () => {
 				this.tipo_cambio = flt(this.controles.tipo_cambio.get_value());
 			},
@@ -420,7 +399,7 @@ class PagosPanel {
 
 	cargar_contexto() {
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_contexto",
+			method: "pagos_chappsa.api.pagos_proveedor.get_contexto",
 			callback: (r) => {
 				this.ctx = r.message || {};
 				if (!this.ctx.puede_crear) this.page.btn_secondary?.prop("disabled", true);
@@ -431,18 +410,14 @@ class PagosPanel {
 	}
 
 	// ==================================================================
-	// Carga del cliente
+	// Carga del proveedor
 	// ==================================================================
-	cargar_cliente(mantener_cuenta) {
-		// cargar_pago() fija el cliente por código; sin este guard esa asignación
-		// dispararía una recarga que pisaría el pago recién abierto.
+	cargar_proveedor(mantener_cuenta) {
 		if (this._cargando) return;
 
-		const cliente = this.controles.cliente.get_value();
+		const proveedor = this.controles.proveedor.get_value();
 
-		// Elegir otro cliente arranca un pago nuevo: se suelta el borrador anterior
-		// para no sobrescribirlo con datos de otra cuenta.
-		if (!mantener_cuenta && cliente !== this._cliente_cargado) {
+		if (!mantener_cuenta && proveedor !== this._proveedor_cargado) {
 			this.pago_name = null;
 			this.solo_lectura = false;
 			this.pago_name_impreso = null;
@@ -452,9 +427,9 @@ class PagosPanel {
 			this.tipo_cambio = null;
 			this.controles.tipo_cambio?.set_value("");
 		}
-		this._cliente_cargado = cliente;
+		this._proveedor_cargado = proveedor;
 
-		if (!cliente) {
+		if (!proveedor) {
 			this.reset_estado();
 			this.cuentas = [];
 			this.render_todo();
@@ -462,15 +437,15 @@ class PagosPanel {
 		}
 
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_documentos",
+			method: "pagos_chappsa.api.pagos_proveedor.get_documentos",
 			args: {
-				cliente,
+				proveedor,
 				empresa: mantener_cuenta ? this.empresa : null,
 				moneda: mantener_cuenta ? this.moneda : null,
 				pago: this.pago_name || null,
 			},
 			freeze: true,
-			freeze_message: __("Cargando documentos del cliente..."),
+			freeze_message: __("Cargando documentos del proveedor..."),
 			callback: (r) => {
 				if (!r.message) return;
 				const data = r.message;
@@ -478,7 +453,7 @@ class PagosPanel {
 				this.cuentas = data.cuentas || [];
 				this.empresa = data.empresa;
 				this.moneda = data.moneda;
-				this.nombre_cliente = data.nombre_cliente;
+				this.nombre_proveedor = data.nombre_proveedor;
 
 				this.documentos = (data.documentos || []).map((d) => ({
 					...d,
@@ -493,14 +468,13 @@ class PagosPanel {
 		});
 	}
 
-	/** Cuentas bancarias de la empresa resuelta, para los grids de transferencia y cheque.
-	 * Filtradas por moneda: un pago en USD no debe ofrecer una cuenta en GTQ. */
+	/** Filtradas por moneda: un pago en USD no debe ofrecer una cuenta en GTQ. */
 	cargar_cuentas_banco() {
 		const clave = `${this.empresa || ""}::${this.moneda || ""}`;
 		if (!this.empresa || this._cuentas_banco_de === clave) return;
 		this._cuentas_banco_de = clave;
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_cuentas_banco",
+			method: "pagos_chappsa.api.pagos_proveedor.get_cuentas_banco",
 			args: { empresa: this.empresa, moneda: this.moneda },
 			callback: (r) => {
 				this.cuentas_banco = r.message || [];
@@ -513,18 +487,12 @@ class PagosPanel {
 		this.empresa = empresa;
 		this.moneda = moneda;
 		this.monto = 0;
-		this.cargar_cliente(true);
+		this.cargar_proveedor(true);
 	}
 
 	// ==================================================================
 	// Distribución
 	// ==================================================================
-	/**
-	 * Reparte el dinero disponible entre los cargos, de lo más antiguo a lo más reciente.
-	 *  - las filas fijadas por el usuario (marcadas o editadas a mano) no se tocan;
-	 *  - un crédito marcado aporta fondos SOLO hasta lo necesario, para no consumir
-	 *    un anticipo y volver a generar otro.
-	 */
 	distribuir() {
 		// "Solo anticipo": el usuario dejó explícito que este pago no abona ningún
 		// documento. Todo el monto queda como excedente (anticipo a favor).
@@ -598,14 +566,28 @@ class PagosPanel {
 			if (a >= 0) aplicado += a;
 			else creditos += -a;
 		});
+		// El gasto bancario ya tiene destino propio (cuenta de gastos bancarios
+		// del perfil Global): no debe contarse como excedente/anticipo.
+		const gasto_bancario = this.total_gasto_bancario();
 		return {
 			aplicado: flt(aplicado),
 			creditos: flt(creditos),
 			monto: flt(this.monto),
-			excedente: flt(this.monto - (aplicado - creditos)),
+			gasto_bancario: flt(gasto_bancario),
+			excedente: flt(this.monto - (aplicado - creditos) - gasto_bancario),
 			saldo_cuenta: flt(this.documentos.reduce((s, d) => s + flt(d.saldo_anterior), 0)),
 			total_formas: this.total_formas(),
 		};
+	}
+
+	/** Suma de "Gasto bancario" en todas las formas que tienen esa columna
+	 * (transferencia, cheque, tarjeta — ver render_formas/col_gasto). */
+	total_gasto_bancario() {
+		let total = 0;
+		["transferencia", "cheque", "tarjeta"].forEach((k) => {
+			this.formas[k].forEach((f) => (total += flt(f.gasto_bancario)));
+		});
+		return flt(total);
 	}
 
 	// ==================================================================
@@ -632,7 +614,7 @@ class PagosPanel {
 		}
 
 		$c.html(
-			`<span class="text-muted" style="font-size:11px; align-self:center;">Este cliente tiene saldo en varias cuentas:</span>` +
+			`<span class="text-muted" style="font-size:11px; align-self:center;">Este proveedor tiene saldo en varias cuentas:</span>` +
 				this.cuentas
 					.map((c) => {
 						const activa = c.empresa === this.empresa && c.moneda === this.moneda;
@@ -667,6 +649,7 @@ class PagosPanel {
 				${metrica("Saldo de la cuenta", this.fmt(t.saldo_cuenta))}
 				${metrica("Aplicado a documentos", this.fmt(t.aplicado))}
 				${metrica("Créditos usados", this.fmt(t.creditos))}
+				${t.gasto_bancario > TOL ? metrica("Gasto bancario", this.fmt(t.gasto_bancario)) : ""}
 				${metrica(
 					falta_fondos ? "Faltan fondos" : "Excedente (anticipo)",
 					this.fmt(falta_fondos ? -t.excedente : t.excedente),
@@ -686,10 +669,8 @@ class PagosPanel {
 		});
 	}
 
-	/** Se muestra únicamente cuando el pago detecta un excedente (anticipo a generar):
-	 * a qué cuenta de mayor se dirigirá ese saldo a favor. Mismo patrón que las
-	 * cuentas por forma de pago: 1 opción configurada = se asigna sola; varias =
-	 * el cobrador elige; ninguna = no se muestra nada (se usa la cuenta por cobrar normal). */
+	/** Se muestra únicamente cuando el pago detecta un excedente (anticipo a
+	 * generar): a qué cuenta de mayor se dirigirá ese saldo a favor de la empresa. */
 	celda_cuenta_anticipo() {
 		const opciones = this.ctx.cuentas_anticipo || [];
 		if (!opciones.length) return "";
@@ -722,10 +703,10 @@ class PagosPanel {
 		const t = this.totales();
 		const $tab = this.$body.find("#pg_tab_dist");
 
-		if (!this.controles.cliente.get_value()) {
+		if (!this.controles.proveedor.get_value()) {
 			$tab.html(`<div class="pg-card" style="border-radius:0 0 10px 10px;">
 				<div class="text-muted" style="padding:24px; text-align:center;">
-					Escriba el nombre del cliente arriba. El detalle de sus documentos pendientes se carga solo.
+					Escriba el nombre del proveedor arriba. El detalle de sus documentos pendientes se carga solo.
 				</div></div>`);
 			return;
 		}
@@ -733,7 +714,7 @@ class PagosPanel {
 		const desajuste =
 			!this.solo_anticipo && Math.abs(t.aplicado - t.creditos - t.monto) > TOL
 				? `<button class="btn btn-xs btn-warning" id="pg_btn_igualar">
-					Usar ${this.fmt(t.aplicado - t.creditos)} como monto recibido</button>`
+					Usar ${this.fmt(t.aplicado - t.creditos)} como monto pagado</button>`
 				: "";
 
 		$tab.html(`
@@ -741,7 +722,7 @@ class PagosPanel {
 
 				<div style="display:flex; flex-wrap:wrap; gap:14px; align-items:end; margin-bottom:14px;">
 					<div>
-						<label class="control-label" style="font-size:11px;">Monto recibido del cliente</label>
+						<label class="control-label" style="font-size:11px;">Monto pagado al proveedor</label>
 						<input type="number" step="0.01" id="pg_monto"
 							class="form-control pg-monto-input" style="width:200px;" value="${flt(this.monto)}"${this.dis()}>
 					</div>
@@ -777,12 +758,12 @@ class PagosPanel {
 				<div class="text-muted" style="margin-top:8px; font-size:11px;">
 					Marque una línea para pagarla completa, o desmárquela para excluirla del pago.
 					También puede escribir el abono exacto en la columna <b>Abono</b>.
-					Las filas <b style="color:#0b6b3a;">en verde</b> son créditos a favor del cliente
+					Las filas <b style="color:#0b6b3a;">en verde</b> son créditos a favor de la empresa
 					(anticipos y devoluciones): márquelas para usarlas contra los documentos pendientes.
 				</div>`
 						: `<div class="text-muted" style="padding:20px 0;">
-							Este cliente no tiene documentos con saldo pendiente.
-							Puede registrar de todos modos un monto recibido: quedará como anticipo a su favor.
+							Este proveedor no tiene documentos con saldo pendiente.
+							Puede registrar de todos modos un monto pagado: quedará como anticipo a su favor.
 						   </div>`
 				}
 			</div>
@@ -796,7 +777,7 @@ class PagosPanel {
 		const marcada = es_credito ? d.aplicar : flt(d.abono) > TOL;
 		const enlace =
 			d.tipo_documento === TIPO_ANTICIPO
-				? `/app/pago-cliente/${encodeURIComponent(d.documento)}`
+				? `/app/pago-proveedor/${encodeURIComponent(d.documento)}`
 				: `/app/${frappe.router.slug(d.tipo_documento)}/${encodeURIComponent(d.documento)}`;
 
 		return `
@@ -821,7 +802,6 @@ class PagosPanel {
 
 		$tab.find("#pg_monto").on("change", (e) => {
 			this.monto = flt($(e.currentTarget).val());
-			// Un monto nuevo reparte desde cero, salvo las líneas fijadas a mano.
 			this.distribuir();
 		});
 
@@ -866,7 +846,6 @@ class PagosPanel {
 				d.aplicar = marcada;
 				d.manual = false;
 			} else {
-				// Marcar = pagar completa y fijarla. Desmarcar = excluirla del pago.
 				d.manual = true;
 				d.abono = marcada ? flt(d.saldo_anterior) : 0;
 			}
@@ -890,7 +869,6 @@ class PagosPanel {
 	// ==================================================================
 	// Formas de pago
 	// ==================================================================
-	/** Si una forma de pago solo tiene una cuenta configurada en el perfil, se asigna sola. */
 	autocompletar_cuentas() {
 		const unica_efectivo = this.cuenta_unica("Efectivo");
 		if (unica_efectivo) this.formas.efectivo.cuenta_contable = unica_efectivo;
@@ -916,7 +894,7 @@ class PagosPanel {
 
 				<div class="alert ${Math.abs(dif) <= TOL ? "alert-success" : "alert-warning"}"
 					style="padding:8px 12px; margin:0; display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-					<span>Monto recibido: <b>${this.fmt(t.monto)}</b></span>
+					<span>Monto pagado: <b>${this.fmt(t.monto)}</b></span>
 					<span>Capturado: <b>${this.fmt(t.total_formas)}</b></span>
 					<span>Diferencia: <b>${this.fmt(dif)}</b></span>
 					${
@@ -966,7 +944,7 @@ class PagosPanel {
 				<div>
 					<label class="control-label" style="font-size:11px;">Comentarios del pago</label>
 					<input type="text" id="pg_comentarios" class="form-control input-sm"
-						placeholder="Referencia interna, quién entrega el pago, observaciones..."
+						placeholder="Referencia interna, quién autoriza el pago, observaciones..."
 						value="${frappe.utils.escape_html(this.comentarios || "")}"${this.dis()}>
 				</div>
 			</div>
@@ -1037,7 +1015,6 @@ class PagosPanel {
 		]);
 	}
 
-	/** Selector de cuenta contable para Efectivo (no vive en un grid). */
 	celda_cuenta_simple(tipo, id, valor) {
 		const opciones = this.opciones_cuenta(tipo);
 		if (!opciones.length) return "";
@@ -1192,7 +1169,7 @@ class PagosPanel {
 		return {
 			name: this.pago_name,
 			empresa: this.empresa,
-			cliente: this.controles.cliente.get_value(),
+			proveedor: this.controles.proveedor.get_value(),
 			fecha,
 			moneda: this.moneda,
 			tipo_cambio: flt(this.tipo_cambio),
@@ -1226,8 +1203,8 @@ class PagosPanel {
 	guardar(validar) {
 		const payload = this.construir_payload();
 
-		if (!payload.cliente) {
-			frappe.msgprint(__("Seleccione un cliente."));
+		if (!payload.proveedor) {
+			frappe.msgprint(__("Seleccione un proveedor."));
 			return;
 		}
 		if (!payload.empresa) {
@@ -1236,8 +1213,8 @@ class PagosPanel {
 		}
 		if (!payload.no_recibo_manual) {
 			frappe.msgprint({
-				title: __("Falta el No. de recibo"),
-				message: __("Escriba el No. del recibo manual que se le entrega al cliente."),
+				title: __("Falta el No. de comprobante"),
+				message: __("Escriba el No. del comprobante de pago que respalda esta transacción."),
 				indicator: "orange",
 			});
 			this.controles.no_recibo.$input?.focus();
@@ -1247,7 +1224,7 @@ class PagosPanel {
 			frappe.msgprint({
 				title: __("Falta el tipo de cambio"),
 				message: __(
-					"Este pago está en {0} y la empresa maneja {1}: indique el tipo de cambio real con el que se recibió.",
+					"Este pago está en {0} y la empresa maneja {1}: indique el tipo de cambio real con el que se realizó.",
 					[this.moneda, this.moneda_empresa()]
 				),
 				indicator: "orange",
@@ -1261,7 +1238,7 @@ class PagosPanel {
 			frappe.msgprint({
 				title: __("Las formas de pago no cuadran"),
 				message: __(
-					"El monto recibido es {0} y las formas de pago capturadas suman {1}. Complete la pestaña 2 antes de continuar.",
+					"El monto pagado es {0} y las formas de pago capturadas suman {1}. Complete la pestaña 2 antes de continuar.",
 					[this.fmt(t.monto), this.fmt(t.total_formas)]
 				),
 				indicator: "orange",
@@ -1271,7 +1248,7 @@ class PagosPanel {
 		}
 
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.guardar_pago",
+			method: "pagos_chappsa.api.pagos_proveedor.guardar_pago",
 			args: { payload: JSON.stringify(payload), validar: validar },
 			freeze: true,
 			freeze_message: validar ? __("Validando pago...") : __("Guardando borrador..."),
@@ -1295,7 +1272,6 @@ class PagosPanel {
 		});
 	}
 
-	/** Tras validar: recibo listo para imprimir, y la pantalla se libera para el siguiente cobro. */
 	ofrecer_impresion(nombre) {
 		const d = new frappe.ui.Dialog({
 			title: __("Pago validado"),
@@ -1305,11 +1281,11 @@ class PagosPanel {
 					fieldtype: "HTML",
 					options: `<div style="font-size:13px; line-height:1.6;">
 						Se registró el pago <b>${frappe.utils.escape_html(nombre)}</b>.<br>
-						<span class="text-muted">El recibo sale en media carta.</span>
+						<span class="text-muted">El comprobante sale en media carta.</span>
 					</div>`,
 				},
 			],
-			primary_action_label: __("🖨️ Imprimir recibo"),
+			primary_action_label: __("🖨️ Imprimir comprobante"),
 			primary_action: () => {
 				this.imprimir_recibo(nombre);
 				d.hide();
@@ -1325,13 +1301,12 @@ class PagosPanel {
 	}
 
 	limpiar() {
-		const cliente = this.controles.cliente.get_value();
+		const proveedor = this.controles.proveedor.get_value();
 		this.reset_estado();
-		if (cliente) this.cargar_cliente();
+		if (proveedor) this.cargar_proveedor();
 		else this.render_todo();
 	}
 
-	/** Deja la pantalla como recién abierta: sin cliente, sin montos, sin formas de pago. */
 	limpiar_todo(forzar) {
 		const hacer = () => {
 			this.reset_estado();
@@ -1340,7 +1315,7 @@ class PagosPanel {
 			this.empresa = null;
 			this.moneda = null;
 			this._cargando = true;
-			this.controles.cliente.set_value("");
+			this.controles.proveedor.set_value("");
 			this._cargando = false;
 			this.controles.fecha.set_value(frappe.datetime.get_today());
 			this.controles.no_recibo.set_value("");
@@ -1359,10 +1334,9 @@ class PagosPanel {
 		}
 	}
 
-	/** Recarga un pago existente en la pantalla. Validado = solo lectura. */
 	cargar_pago(name) {
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_pago",
+			method: "pagos_chappsa.api.pagos_proveedor.get_pago",
 			args: { name },
 			freeze: true,
 			freeze_message: __("Cargando pago..."),
@@ -1379,7 +1353,7 @@ class PagosPanel {
 
 				this.empresa = d.empresa;
 				this.moneda = d.moneda;
-				this.nombre_cliente = d.nombre_cliente;
+				this.nombre_proveedor = d.nombre_proveedor;
 				this.cuenta_anticipo = d.cuenta_anticipo || null;
 				this.cuentas = d.cuentas || [];
 				this.tipo_cambio = flt(d.tipo_cambio) || null;
@@ -1419,20 +1393,17 @@ class PagosPanel {
 					}
 				});
 
-				// set_value de un control Link es ASÍNCRONO: su onchange llega después.
-				// Hay que sostener el guard hasta que la promesa resuelva, o esa recarga
-				// pisa el pago recién abierto y lo devuelve a modo edición.
 				this._cargando = true;
 				const terminar = () => {
 					this._cargando = false;
-					this._cliente_cargado = d.cliente;
+					this._proveedor_cargado = d.proveedor;
 					this.cargar_cuentas_banco();
 					this.render_todo();
 					this.actualizar_acciones();
 					this.$body.find('.nav-link[data-tab="dist"]').trigger("click");
 				};
 
-				Promise.resolve(this.controles.cliente.set_value(d.cliente))
+				Promise.resolve(this.controles.proveedor.set_value(d.proveedor))
 					.then(() => this.controles.fecha.set_value(d.fecha))
 					.then(() => this.controles.no_recibo.set_value(d.no_recibo_manual || ""))
 					.then(() => this.controles.tipo_cambio.set_value(this.tipo_cambio || ""))
@@ -1446,8 +1417,8 @@ class PagosPanel {
 	// ==================================================================
 	refrescar_recientes() {
 		frappe.call({
-			method: "pagos_chappsa.api.pagos.get_pagos_recientes",
-			args: { cliente: this.controles?.cliente?.get_value() || null, limite: 25 },
+			method: "pagos_chappsa.api.pagos_proveedor.get_pagos_recientes",
+			args: { proveedor: this.controles?.proveedor?.get_value() || null, limite: 25 },
 			callback: (r) => this.render_recientes(r.message || []),
 		});
 	}
@@ -1464,7 +1435,7 @@ class PagosPanel {
 				<td><b>${frappe.utils.escape_html(p.name)}</b></td>
 				<td>${frappe.utils.escape_html(p.no_recibo_manual || "")}</td>
 				<td>${frappe.datetime.str_to_user(p.fecha) || ""}</td>
-				<td>${frappe.utils.escape_html(p.nombre_cliente || p.cliente || "")}</td>
+				<td>${frappe.utils.escape_html(p.nombre_proveedor || p.proveedor || "")}</td>
 				<td>${frappe.utils.escape_html(p.nombre_cobrador || p.cobrador || "")}</td>
 				<td class="text-right">${format_currency(p.monto_recibido, p.moneda)}</td>
 				<td class="text-right">${format_currency(p.total_aplicado, p.moneda)}</td>
@@ -1474,7 +1445,7 @@ class PagosPanel {
 					${
 						p.docstatus === 1 && puede_reimprimir
 							? `<button class="btn btn-xs btn-default pg-imprimir" data-pago="${frappe.utils.escape_html(p.name)}"
-							     title="Imprimir recibo">🖨️</button>`
+							     title="Imprimir comprobante">🖨️</button>`
 							: ""
 					}
 					${
@@ -1493,12 +1464,12 @@ class PagosPanel {
 			<div class="pg-card" style="border-radius:0 0 10px 10px; overflow-x:auto;">
 				<div class="text-muted" style="font-size:11px; margin-bottom:8px;">
 					Haga clic en una fila para abrirla. Los <b>borradores</b> se pueden seguir editando;
-					los <b>validados</b> se abren en solo lectura. El recibo solo existe para pagos validados.
+					los <b>validados</b> se abren en solo lectura. El comprobante solo existe para pagos validados.
 				</div>
 				<table class="table table-bordered table-sm pg-tabla" style="margin:0; font-size:12px;">
 					<thead><tr>
-						<th>Pago</th><th>No. recibo</th><th>Fecha</th><th>Cliente</th><th>Cobrador</th>
-						<th class="text-right">Recibido</th><th class="text-right">Aplicado</th>
+						<th>Pago</th><th>No. comprobante</th><th>Fecha</th><th>Proveedor</th><th>Registrado por</th>
+						<th class="text-right">Pagado</th><th class="text-right">Aplicado</th>
 						<th class="text-right">Anticipo disp.</th><th>Estado</th><th style="width:70px;">Acciones</th>
 					</tr></thead>
 					<tbody>${cuerpo || `<tr><td colspan="10" class="text-muted text-center">Sin pagos</td></tr>`}</tbody>

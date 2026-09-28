@@ -2,15 +2,15 @@
  "actions": [],
  "allow_rename": 0,
  "autoname": "naming_series:",
- "creation": "2026-08-28 00:00:00.000000",
+ "creation": "2026-09-15 00:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
   "empresa",
-  "cliente",
-  "nombre_cliente",
+  "proveedor",
+  "nombre_proveedor",
   "col_break_head",
   "fecha",
   "no_recibo_manual",
@@ -41,12 +41,12 @@
  ],
  "fields": [
   {
-   "default": "PC-.YYYY.-",
+   "default": "PP-.YYYY.-",
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Serie",
    "no_copy": 1,
-   "options": "PC-.YYYY.-",
+   "options": "PP-.YYYY.-",
    "print_hide": 1,
    "reqd": 1,
    "set_only_once": 1
@@ -61,19 +61,19 @@
    "reqd": 1
   },
   {
-   "fieldname": "cliente",
+   "fieldname": "proveedor",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Cliente",
-   "options": "Customer",
+   "label": "Proveedor",
+   "options": "Supplier",
    "reqd": 1,
    "search_index": 1
   },
   {
-   "fetch_from": "cliente.customer_name",
-   "fieldname": "nombre_cliente",
+   "fetch_from": "proveedor.supplier_name",
+   "fieldname": "nombre_proveedor",
    "fieldtype": "Data",
-   "label": "Nombre del cliente",
+   "label": "Nombre del proveedor",
    "read_only": 1
   },
   {
@@ -92,12 +92,12 @@
   {
    "allow_on_submit": 1,
    "bold": 1,
-   "description": "Número del recibo físico que se le deja al cliente. No se puede repetir.",
+   "description": "Número del comprobante/voucher de pago que respalda esta transacción. No se puede repetir.",
    "fieldname": "no_recibo_manual",
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "No. de recibo manual",
+   "label": "No. de comprobante de pago",
    "no_copy": 1,
    "reqd": 1,
    "search_index": 1
@@ -134,11 +134,11 @@
   },
   {
    "bold": 1,
-   "description": "Dinero efectivamente recibido del cliente en este pago.",
+   "description": "Dinero efectivamente entregado al proveedor en este pago.",
    "fieldname": "monto_recibido",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Monto recibido / a distribuir",
+   "label": "Monto pagado / a distribuir",
    "options": "moneda"
   },
   {
@@ -150,7 +150,7 @@
    "read_only": 1
   },
   {
-   "description": "Anticipos y devoluciones del cliente consumidos en este pago.",
+   "description": "Anticipos y notas de crédito del proveedor consumidos en este pago.",
    "fieldname": "total_creditos_aplicados",
    "fieldtype": "Currency",
    "label": "Créditos aplicados",
@@ -162,7 +162,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Parte del monto recibido que no se aplicó a ningún documento. Queda como anticipo a favor del cliente.",
+   "description": "Parte del monto pagado que no se aplicó a ningún documento. Queda como anticipo entregado al proveedor.",
    "fieldname": "excedente",
    "fieldtype": "Currency",
    "label": "Excedente (anticipo generado)",
@@ -171,7 +171,7 @@
   },
   {
    "depends_on": "eval:flt(doc.excedente) > 0",
-   "description": "Cuenta contable donde se registrará el saldo a favor del cliente que deja este pago. Vacío = se usa la configurada en el perfil Global, o la cuenta por cobrar normal del cliente.",
+   "description": "Cuenta contable donde se registrará el saldo a favor de la empresa que deja este pago (anticipo entregado al proveedor). Vacío = se usa la configurada en el perfil Global, o la cuenta por pagar normal del proveedor.",
    "fieldname": "cuenta_anticipo",
    "fieldtype": "Link",
    "label": "Cuenta de anticipo",
@@ -208,7 +208,7 @@
    "read_only": 1
   },
   {
-   "description": "Suma del detalle de formas de pago. Debe coincidir con el monto recibido.",
+   "description": "Suma del detalle de formas de pago. Debe coincidir con el monto pagado.",
    "fieldname": "total_formas_pago",
    "fieldtype": "Currency",
    "label": "Total formas de pago",
@@ -224,12 +224,12 @@
    "fieldname": "detalle_documentos",
    "fieldtype": "Table",
    "label": "Detalle de documentos",
-   "options": "Detalle Documento Pago"
+   "options": "Detalle Documento Pago Proveedor"
   },
   {
    "fieldname": "sec_formas_pago",
    "fieldtype": "Section Break",
-   "label": "Formas de pago recibidas"
+   "label": "Formas de pago entregadas"
   },
   {
    "fieldname": "detalle_formas_pago",
@@ -252,37 +252,37 @@
    "fieldtype": "Link",
    "label": "Amended From",
    "no_copy": 1,
-   "options": "Pago Cliente",
+   "options": "Pago Proveedor",
    "print_hide": 1,
    "read_only": 1
   },
   {
+   "description": "Usuario que registró el pago. Determina la serie del comprobante y los permisos aplicados.",
    "fieldname": "cobrador",
    "fieldtype": "Link",
-   "label": "Cobrador",
+   "in_standard_filter": 1,
+   "label": "Registrado por",
+   "no_copy": 1,
    "options": "User",
    "read_only": 1,
-   "no_copy": 1,
-   "in_standard_filter": 1,
-   "search_index": 1,
-   "description": "Usuario que registró el cobro. Determina la serie del recibo y los permisos aplicados."
+   "search_index": 1
   },
   {
    "fetch_from": "cobrador.full_name",
    "fieldname": "nombre_cobrador",
    "fieldtype": "Data",
-   "label": "Nombre del cobrador",
-   "read_only": 1,
-   "no_copy": 1
+   "label": "Nombre de quien registró",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-08-28 00:00:00.000000",
+ "modified": "2026-09-15 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Pagos Chappsa",
- "name": "Pago Cliente",
+ "name": "Pago Proveedor",
  "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
@@ -330,10 +330,10 @@
    "write": 1
   }
  ],
- "search_fields": "no_recibo_manual,cliente,nombre_cliente,fecha,monto_recibido",
+ "search_fields": "no_recibo_manual,proveedor,nombre_proveedor,fecha,monto_recibido",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "nombre_cliente",
+ "title_field": "nombre_proveedor",
  "track_changes": 1
 }

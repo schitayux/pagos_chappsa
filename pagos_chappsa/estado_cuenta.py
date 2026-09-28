@@ -13,7 +13,7 @@ cuenta que ignore dinero ya recibido induciría a cobrar dos veces.
 import frappe
 from frappe.utils import flt
 
-from pagos_chappsa.saldos import TIPO_ANTICIPO, TOLERANCIA, TIPOS_ACTIVOS, get_config
+from pagos_chappsa.saldos import TIPO_ANTICIPO, TOLERANCIA, get_config, get_tipo_activo
 
 
 def clientes_visibles_o_none():
@@ -89,7 +89,7 @@ def get_detalle(empresa=None, moneda=None, cliente=None, hasta=None, incluir_sal
 		if not empresa and not empresas_perfil:
 			return []
 
-	for tipo in TIPOS_ACTIVOS:
+	for tipo in [get_tipo_activo()]:
 		cfg = get_config(tipo)
 		campos = [
 			"name as documento",

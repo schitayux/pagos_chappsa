@@ -7,17 +7,31 @@ from frappe.model.document import Document
 
 
 class PerfildeCobranza(Document):
+	def autoname(self):
+		# El perfil Global puede no representar a ningún cobrador (es_global sin
+		# usuario): es puro interruptor de sistema, así que no puede nombrarse con
+		# el campo usuario como hacen los perfiles normales.
+		if self.es_global and not self.usuario:
+			self.name = "Perfil Global de Cobranza"
+
 	def validate(self):
-		self.validar_serie()
-		self.validar_alcance()
+		if self.usuario:
+			# Serie de recibo y alcance por empresa/bodega solo tienen sentido para
+			# el perfil de un cobrador real; un Global sin usuario es únicamente el
+			# interruptor de Origen y no debe exigirlos.
+			self.validar_serie()
+			self.validar_alcance()
+		self.validar_origen_global()
 
 	def on_update(self):
 		sincronizar_series_en_pago_cliente()
 		frappe.cache.delete_value("pagos_chappsa_perfiles")
+		frappe.cache.delete_value("pagos_chappsa_origen_global")
 
 	def on_trash(self):
 		sincronizar_series_en_pago_cliente(excluir=self.name)
 		frappe.cache.delete_value("pagos_chappsa_perfiles")
+		frappe.cache.delete_value("pagos_chappsa_origen_global")
 
 	def validar_serie(self):
 		serie = (self.serie_recibo or "").strip()
@@ -58,6 +72,24 @@ class PerfildeCobranza(Document):
 			if fila.empresa in vistas:
 				frappe.throw(_("La empresa {0} está repetida.").format(frappe.bold(fila.empresa)))
 			vistas.add(fila.empresa)
+
+	def validar_origen_global(self):
+		if not self.es_global:
+			return
+
+		if not self.origen:
+			frappe.throw(_("Indique el Origen para el perfil marcado como Global."))
+
+		otro = frappe.db.get_value(
+			"Perfil de Cobranza", {"es_global": 1, "name": ("!=", self.name)}, "name"
+		)
+		if otro:
+			frappe.throw(
+				_(
+					"Ya existe un perfil Global ({0}). Solo puede haber uno a la vez: desmárquelo "
+					"primero si quiere que este perfil sea el nuevo Global."
+				).format(frappe.bold(otro))
+			)
 
 
 def sincronizar_series_en_pago_cliente(excluir=None):

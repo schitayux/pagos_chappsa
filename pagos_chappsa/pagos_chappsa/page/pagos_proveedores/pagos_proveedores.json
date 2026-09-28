@@ -1,0 +1,28 @@
+{
+ "content": null,
+ "creation": "2026-09-15 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-09-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Pagos Chappsa",
+ "name": "pagos_proveedores",
+ "owner": "Administrator",
+ "page_name": "pagos_proveedores",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Accounts Manager"
+  },
+  {
+   "role": "Accounts User"
+  }
+ ],
+ "script": null,
+ "standard": "Yes",
+ "style": null,
+ "title": "Pagos a Proveedores"
+}

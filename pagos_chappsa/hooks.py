@@ -79,11 +79,23 @@ app_license = "mit"
 # 	"filters": "pagos_chappsa.utils.jinja_filters"
 # }
 
+jinja = {
+	"methods": [
+		"pagos_chappsa.saldos.get_referencia_campo",
+		"pagos_chappsa.saldos_proveedor.get_referencia_campo_proveedor",
+	]
+}
+
 # Installation
 # ------------
 
 # before_install = "pagos_chappsa.install.before_install"
 # after_install = "pagos_chappsa.install.after_install"
+
+after_migrate = [
+	"pagos_chappsa.integracion_nativa.crear_custom_fields",
+	"pagos_chappsa.integracion_nativa_proveedor.crear_custom_fields",
+]
 
 # Uninstallation
 # ------------
@@ -144,6 +156,23 @@ app_license = "mit"
 # 		"on_trash": "method"
 # 	}
 # }
+
+doc_events = {
+	"Sales Invoice": {
+		"validate": "pagos_chappsa.integracion_nativa.validar_factura_desde_nota_entrega",
+		"on_submit": "pagos_chappsa.integracion_nativa.aplicar_pagos_retroactivos_nota_entrega",
+	},
+	"Payment Entry": {
+		# Cancelar desde ERPNext (contabilidad) una Payment Entry generada por
+		# Cobranza o Pagos a Proveedores también cancela el Pago Cliente/Pago
+		# Proveedor que la originó. La otra dirección (cancelar desde el page)
+		# ya existe en Pago Cliente/Pago Proveedor.on_cancel.
+		"on_cancel": [
+			"pagos_chappsa.integracion_nativa.cancelar_pago_cliente_si_corresponde",
+			"pagos_chappsa.integracion_nativa_proveedor.cancelar_pago_proveedor_si_corresponde",
+		],
+	},
+}
 
 # Scheduled Tasks
 # ---------------
@@ -252,4 +281,5 @@ app_license = "mit"
 # ---------------------------------------------------------------------------
 permission_query_conditions = {
 	"Pago Cliente": "pagos_chappsa.permisos.pago_cliente_query",
+	"Pago Proveedor": "pagos_chappsa.permisos_proveedor.pago_proveedor_query",
 }

@@ -1,6 +1,6 @@
-{#- Recibo de Pago — media carta.
-    El CSS vive aparte, en recibo.css, y se inserta abajo con {% include %}.
-    Contexto: `doc` = Pago Cliente validado. -#}
+{#- Comprobante de Pago a Proveedor — media carta.
+    El CSS se reutiliza del recibo de cobranza (layout genérico, sin texto propio).
+    Contexto: `doc` = Pago Proveedor validado. -#}
 
 {%- set empresa = frappe.get_cached_doc("Company", doc.empresa) -%}
 {%- set simbolo = frappe.db.get_value("Currency", doc.moneda, "symbol") or doc.moneda -%}
@@ -8,11 +8,10 @@
 {%- set cargos = doc.detalle_documentos | selectattr("clase", "equalto", "Cargo") | list -%}
 {%- set creditos = doc.detalle_documentos | rejectattr("clase", "equalto", "Cargo") | list -%}
 
-{#- Números internos de las notas/facturas abonadas. Se usa el número interno
-    (custom_numero_nota) cuando existe; si no, el nombre del documento. -#}
+{#- Números internos de las facturas abonadas. -#}
 {%- set ns = namespace(numeros=[]) -%}
 {%- for f in cargos -%}
-	{%- set campo_ref = get_referencia_campo(f.tipo_documento) -%}
+	{%- set campo_ref = get_referencia_campo_proveedor(f.tipo_documento) -%}
 	{%- set interno = f.referencia or (campo_ref and frappe.db.get_value(f.tipo_documento, f.documento, campo_ref)) -%}
 	{%- set ns.numeros = ns.numeros + [interno or f.documento] -%}
 {%- endfor -%}
@@ -21,7 +20,7 @@
 
 <div class="recibo">
 
-	{% if doc.docstatus == 2 %}<div class="rc-anulado">RECIBO ANULADO</div>{% endif %}
+	{% if doc.docstatus == 2 %}<div class="rc-anulado">COMPROBANTE ANULADO</div>{% endif %}
 
 	<table class="rc-encabezado">
 		<tr>
@@ -33,10 +32,10 @@
 				</div>
 			</td>
 			<td style="width:45%; vertical-align:middle;" class="der">
-				<div class="rc-titulo">RECIBO DE PAGO</div>
+				<div class="rc-titulo">COMPROBANTE DE PAGO A PROVEEDOR</div>
 				<div class="rc-numero">{{ doc.name }}</div>
 				{% if doc.no_recibo_manual %}
-				<div class="rc-fecha">Recibo manual: <b>{{ doc.no_recibo_manual }}</b></div>
+				<div class="rc-fecha">Comprobante manual: <b>{{ doc.no_recibo_manual }}</b></div>
 				{% endif %}
 				<div class="rc-fecha">Fecha: {{ frappe.format(doc.fecha, {"fieldtype": "Date"}) }}</div>
 			</td>
@@ -45,16 +44,16 @@
 
 	<table class="rc-cliente">
 		<tr>
-			<td class="rc-etq">Recibí de</td>
-			<td class="rc-val" colspan="3">{{ doc.nombre_cliente or doc.cliente }}</td>
+			<td class="rc-etq">Pagado a</td>
+			<td class="rc-val" colspan="3">{{ doc.nombre_proveedor or doc.proveedor }}</td>
 		</tr>
 		<tr>
-			<td class="rc-etq">Código</td><td class="rc-val">{{ doc.cliente }}</td>
+			<td class="rc-etq">Código</td><td class="rc-val">{{ doc.proveedor }}</td>
 			<td class="rc-etq">Moneda</td><td class="rc-val">{{ doc.moneda }}</td>
 		</tr>
 		{% if doc.nombre_cobrador or doc.cobrador %}
 		<tr>
-			<td class="rc-etq">Recibido por</td>
+			<td class="rc-etq">Registrado por</td>
 			<td class="rc-val" colspan="3">{{ doc.nombre_cobrador or doc.cobrador }}</td>
 		</tr>
 		{% endif %}
@@ -62,7 +61,7 @@
 
 	{% if ns.numeros %}
 	<div class="rc-bloque">
-		<div class="rc-bloque-tit">Documentos abonados ({{ ns.numeros | length }})</div>
+		<div class="rc-bloque-tit">Facturas pagadas ({{ ns.numeros | length }})</div>
 		<div class="rc-docs">{{ ns.numeros | join(" · ") }}</div>
 	</div>
 	{% endif %}
@@ -116,7 +115,7 @@
 					<td class="der">{{ simbolo }} {{ "{:,.2f}".format(f.monto or 0) }}</td>
 				</tr>
 			{% else %}
-				<tr><td colspan="5" class="cen">Aplicación de créditos del cliente (sin efectivo)</td></tr>
+				<tr><td colspan="5" class="cen">Aplicación de créditos del proveedor (sin efectivo)</td></tr>
 			{% endfor %}
 			</tbody>
 		</table>
@@ -131,20 +130,20 @@
 		{% if doc.total_creditos_aplicados %}
 		<tr>
 			<td></td>
-			<td class="rc-t-etq">Créditos del cliente aplicados</td>
+			<td class="rc-t-etq">Créditos del proveedor aplicados</td>
 			<td class="rc-t-val">({{ simbolo }} {{ "{:,.2f}".format(doc.total_creditos_aplicados) }})</td>
 		</tr>
 		{% endif %}
 		{% if doc.excedente %}
 		<tr>
 			<td></td>
-			<td class="rc-t-etq">Excedente a favor del cliente</td>
+			<td class="rc-t-etq">Excedente entregado como anticipo</td>
 			<td class="rc-t-val">{{ simbolo }} {{ "{:,.2f}".format(doc.excedente) }}</td>
 		</tr>
 		{% endif %}
 		<tr class="rc-total-final">
 			<td></td>
-			<td class="rc-t-etq">TOTAL RECIBIDO</td>
+			<td class="rc-t-etq">TOTAL PAGADO</td>
 			<td class="rc-t-val">{{ simbolo }} {{ "{:,.2f}".format(doc.monto_recibido or 0) }}</td>
 		</tr>
 	</table>
@@ -159,12 +158,12 @@
 
 	<table class="rc-firmas">
 		<tr>
-			<td style="width:50%;"><div class="rc-linea">Recibí conforme<br>{{ doc.nombre_cobrador or doc.cobrador or "" }}</div></td>
-			<td style="width:50%;"><div class="rc-linea">Entregué conforme<br>{{ doc.nombre_cliente or doc.cliente }}</div></td>
+			<td style="width:50%;"><div class="rc-linea">Pagó<br>{{ doc.nombre_cobrador or doc.cobrador or "" }}</div></td>
+			<td style="width:50%;"><div class="rc-linea">Recibí conforme<br>{{ doc.nombre_proveedor or doc.proveedor }}</div></td>
 		</tr>
 	</table>
 
 	<div class="rc-pie">
-		{{ empresa.name }} · Recibo {{ doc.name }} · Impreso {{ frappe.utils.format_datetime(frappe.utils.now()) }}
+		{{ empresa.name }} · Comprobante {{ doc.name }} · Impreso {{ frappe.utils.format_datetime(frappe.utils.now()) }}
 	</div>
 </div>

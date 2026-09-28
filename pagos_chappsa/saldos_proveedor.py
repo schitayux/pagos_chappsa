@@ -1,105 +1,70 @@
 # Copyright (c) 2026, Josue Velasquez and contributors
 # For license information, please see license.txt
-"""Cálculo de saldos pendientes de pago por cliente.
+"""Cálculo de saldos pendientes de pago a proveedores.
 
-Este módulo es la única fuente de verdad de "cuánto debe un cliente".  No toca
-contabilidad: el saldo de cada documento se deriva de los abonos registrados en
-Pagos Cliente **validados** (docstatus = 1).
+Equivalente, para cuentas por pagar, de `pagos_chappsa.saldos`. A diferencia de
+aquel módulo, aquí no hay Origen que elegir: el único documento que se paga es
+la Factura de Compra.
 
-Convención de signos (uniforme para todo tipo de documento):
+Convención de signos (igual que en cobranza):
 
 	saldo = valor_original - abonado
 
-	* valor_original > 0  ->  CARGO   (el cliente debe: Nota de Entrega normal)
-	* valor_original < 0  ->  CRÉDITO (a favor del cliente: devolución o anticipo)
-
-Gracias a esa convención, anticipos, devoluciones y notas de entrega se manejan
-con el mismo código, y "matar" un crédito contra una factura no es más que una
-línea con abono negativo dentro del mismo pago.
+	* valor_original > 0  ->  CARGO   (se le debe al proveedor: factura normal)
+	* valor_original < 0  ->  CRÉDITO (a favor de la empresa: devolución o anticipo)
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt
 
-# Tolerancia de redondeo al comparar montos (2 decimales).
 TOLERANCIA = 0.005
 
-# Documento que representa un anticipo: el propio Pago Cliente que dejó excedente.
-TIPO_ANTICIPO = "Pago Cliente"
+# Documento que representa un anticipo: el propio Pago Proveedor que dejó excedente.
+TIPO_ANTICIPO = "Pago Proveedor"
 
-# ---------------------------------------------------------------------------
-# Registro de tipos de documento cobrables.
-#
-# El tipo activo hoy lo decide el perfil Global (ver get_tipo_activo más abajo);
-# esta tabla solo necesita traer la config de cada tipo soportado.
-# ---------------------------------------------------------------------------
+TIPO_ACTIVO = "Purchase Invoice"
+
 CONFIG_DOCUMENTOS = {
-	"Delivery Note": {
-		"cliente": "customer",
+	"Purchase Invoice": {
+		"proveedor": "supplier",
 		"empresa": "company",
 		"moneda": "currency",
 		"fecha": "posting_date",
 		"valor": "grand_total",
-		"referencia": "custom_numero_nota",
+		"referencia": "bill_no",
 		"filtros": {"docstatus": 1},
-		"etiqueta": "Nota de Entrega",
-	},
-	"Sales Invoice": {
-		"cliente": "customer",
-		"empresa": "company",
-		"moneda": "currency",
-		"fecha": "posting_date",
-		"valor": "grand_total",
-		"referencia": "po_no",
-		"filtros": {"docstatus": 1},
-		"etiqueta": "Factura",
+		"etiqueta": "Factura de Compra",
 	},
 }
 
-# El tipo que hoy se cobra ya no es un valor fijo: lo decide el Origen del
-# perfil de cobranza marcado como Global (ver Perfil de Cobranza). Sin un
-# perfil Global configurado se mantiene "Delivery Note", el comportamiento
-# histórico de esta instalación.
-ORIGEN_GLOBAL_A_TIPO = {
-	"Nota de Entrega": "Delivery Note",
-	"Factura de Venta": "Sales Invoice",
-}
 
+def get_activo_global():
+	"""True si existe un Perfil de Pago Proveedor marcado como Global.
 
-def get_origen_global():
-	"""Origen configurado en el perfil marcado como Global, o None si no hay ninguno.
-
-	None es distinto de "Nota de Entrega": significa que nadie ha configurado el
-	interruptor todavía, así que ninguna restricción nueva (1 factura por nota,
-	pago nativo automático) debe activarse. Solo `get_tipo_activo()` usa
-	"Delivery Note" como valor por defecto, para no alterar el cálculo de saldos
-	de instalaciones que aún no adoptan el Global.
+	Es el interruptor de activación: sin un perfil Global configurado, nada de
+	`integracion_nativa_proveedor` toca facturas ni pagos nativos.
 	"""
 
 	def _calcular():
-		return frappe.db.get_value("Perfil de Cobranza", {"es_global": 1}, "origen")
+		return bool(frappe.db.exists("Perfil de Pago Proveedor", {"es_global": 1}))
 
-	return frappe.cache.get_value("pagos_chappsa_origen_global", generator=_calcular)
-
-
-def get_tipo_activo():
-	return ORIGEN_GLOBAL_A_TIPO.get(get_origen_global(), "Delivery Note")
+	return frappe.cache.get_value("pagos_chappsa_proveedor_activo_global", generator=_calcular)
 
 
 def get_config(tipo_documento):
 	cfg = CONFIG_DOCUMENTOS.get(tipo_documento)
 	if not cfg:
-		frappe.throw(_("Tipo de documento no soportado para pagos: {0}").format(tipo_documento))
+		frappe.throw(_("Tipo de documento no soportado para pagos a proveedores: {0}").format(tipo_documento))
 	return cfg
 
 
-def get_referencia_campo(tipo_documento):
+def get_referencia_campo_proveedor(tipo_documento):
 	"""Campo de "número interno" de `tipo_documento`, o None si no aplica.
 
-	A diferencia de `get_config`, no truena para tipos sin configuración (como
-	TIPO_ANTICIPO, que es el propio Pago Cliente): la usan plantillas de
-	impresión que solo quieren mostrar algo si existe, nunca reventar.
+	Nombre distinto del de `pagos_chappsa.saldos.get_referencia_campo` a propósito:
+	ambos se registran como método Jinja global y un mismo nombre pisaría al otro
+	en el entorno de plantillas.
 	"""
 	cfg = CONFIG_DOCUMENTOS.get(tipo_documento)
 	return cfg.get("referencia") if cfg else None
@@ -112,7 +77,7 @@ def get_abonos(claves, excluir_pago=None):
 	"""Suma de abonos validados por documento.
 
 	:param claves: iterable de tuplas (tipo_documento, documento)
-	:param excluir_pago: nombre de un Pago Cliente a ignorar (el que se edita)
+	:param excluir_pago: nombre de un Pago Proveedor a ignorar (el que se edita)
 	:return: dict {(tipo_documento, documento): abonado}
 	"""
 	por_tipo = {}
@@ -132,8 +97,8 @@ def get_abonos(claves, excluir_pago=None):
 
 	sql = """
 		select d.tipo_documento, d.documento, sum(d.abono) as abonado
-		from `tabDetalle Documento Pago` d
-		inner join `tabPago Cliente` p on p.name = d.parent
+		from `tabDetalle Documento Pago Proveedor` d
+		inner join `tabPago Proveedor` p on p.name = d.parent
 		where p.docstatus = 1 and ({condiciones})
 	""".format(condiciones=" or ".join(condiciones))
 
@@ -148,19 +113,15 @@ def get_abonos(claves, excluir_pago=None):
 
 
 # ---------------------------------------------------------------------------
-# Documentos del cliente
+# Documentos del proveedor
 # ---------------------------------------------------------------------------
-def _documentos_cargo(cliente, empresa=None, tipos=None, aplicar_permisos=True):
-	"""Notas de Entrega (o facturas) del cliente, incluidas las devoluciones.
-
-	`empresa` es opcional: sin ella se traen las de todas las empresas, que es lo
-	que necesita la página para mostrarle al usuario dónde tiene saldo el cliente.
-	"""
+def _documentos_cargo(proveedor, empresa=None, tipos=None, aplicar_permisos=True):
+	"""Facturas de Compra del proveedor, incluidas las devoluciones."""
 	resultado = []
-	for tipo in tipos or [get_tipo_activo()]:
+	for tipo in tipos or [TIPO_ACTIVO]:
 		cfg = get_config(tipo)
 		filtros = dict(cfg["filtros"])
-		filtros[cfg["cliente"]] = cliente
+		filtros[cfg["proveedor"]] = proveedor
 		if empresa:
 			filtros[cfg["empresa"]] = empresa
 
@@ -175,13 +136,11 @@ def _documentos_cargo(cliente, empresa=None, tipos=None, aplicar_permisos=True):
 			campos.append(f"{cfg['referencia']} as referencia")
 
 		# get_list (NO get_all): aplica User Permissions y los permission_query_conditions
-		# de todas las apps. get_all los ignora, y con él un vendedor vería las notas de
-		# entrega de clientes que no le corresponden.
+		# de todas las apps, igual que en cobranza.
 		filas = frappe.get_list(tipo, filters=filtros, fields=campos, limit_page_length=0)
 
-		# Acota a las bodegas que el perfil del cobrador tiene permitidas.
 		if aplicar_permisos and filas:
-			from pagos_chappsa.permisos import filtrar_documentos_por_bodega
+			from pagos_chappsa.permisos_proveedor import filtrar_documentos_por_bodega
 
 			visibles = set(filtrar_documentos_por_bodega(tipo, [f.documento for f in filas]))
 			filas = [f for f in filas if f.documento in visibles]
@@ -195,9 +154,9 @@ def _documentos_cargo(cliente, empresa=None, tipos=None, aplicar_permisos=True):
 	return resultado
 
 
-def _documentos_anticipo(cliente, empresa=None, excluir_pago=None):
-	"""Excedentes dejados por pagos validados anteriores (anticipos)."""
-	filtros = {"cliente": cliente, "docstatus": 1, "excedente": (">", TOLERANCIA)}
+def _documentos_anticipo(proveedor, empresa=None, excluir_pago=None):
+	"""Excedentes dejados por pagos validados anteriores (anticipos entregados)."""
+	filtros = {"proveedor": proveedor, "docstatus": 1, "excedente": (">", TOLERANCIA)}
 	if empresa:
 		filtros["empresa"] = empresa
 	if excluir_pago:
@@ -218,7 +177,7 @@ def _documentos_anticipo(cliente, empresa=None, excluir_pago=None):
 				"fecha_documento": fila.fecha_documento,
 				"moneda": fila.moneda,
 				"empresa": fila.empresa,
-				# Signo negativo: es dinero a favor del cliente.
+				# Signo negativo: es dinero a favor de la empresa (ya entregado al proveedor).
 				"valor_original": -flt(fila.excedente),
 				"referencia": "",
 			}
@@ -227,25 +186,17 @@ def _documentos_anticipo(cliente, empresa=None, excluir_pago=None):
 
 
 def get_documentos_pendientes(
-	cliente, empresa=None, moneda=None, excluir_pago=None, incluir_saldados=False, aplicar_permisos=True
+	proveedor, empresa=None, moneda=None, excluir_pago=None, incluir_saldados=False, aplicar_permisos=True
 ):
-	"""Documentos del cliente con saldo distinto de cero, ordenados de más antiguo a más reciente.
-
-	Cada fila trae: tipo_documento, etiqueta_tipo, documento, clase, fecha_documento,
-	empresa, moneda, valor_original, abonado_previo, saldo_anterior, referencia.
-
-	`empresa` y `moneda` son opcionales; sin ellas devuelve todo el saldo del cliente,
-	que es lo que la página usa para ofrecerle al usuario las cuentas disponibles.
-	"""
-	if not cliente:
+	"""Documentos del proveedor con saldo distinto de cero, del más antiguo al más reciente."""
+	if not proveedor:
 		return []
 
-	documentos = _documentos_cargo(cliente, empresa, aplicar_permisos=aplicar_permisos)
-	documentos += _documentos_anticipo(cliente, empresa, excluir_pago=excluir_pago)
+	documentos = _documentos_cargo(proveedor, empresa, aplicar_permisos=aplicar_permisos)
+	documentos += _documentos_anticipo(proveedor, empresa, excluir_pago=excluir_pago)
 
-	# Acota a las empresas del perfil del cobrador.
 	if aplicar_permisos:
-		from pagos_chappsa.permisos import get_empresas_permitidas
+		from pagos_chappsa.permisos_proveedor import get_empresas_permitidas
 
 		permitidas = get_empresas_permitidas()
 		if permitidas is not None:
@@ -293,11 +244,9 @@ def get_saldo_documento(tipo_documento, documento, excluir_pago=None):
 def distribuir_monto(documentos, monto_disponible):
 	"""Reparte `monto_disponible` entre los CARGOS, del más antiguo al más reciente.
 
-	Los créditos marcados con `aplicar` = 1 aportan fondos, pero **solo hasta lo
-	necesario** para cubrir los cargos: un crédito no se consume para volver a
-	convertirse en anticipo. Devuelve (documentos_con_abono, excedente).
-
-	`documentos` debe venir ordenado por fecha ascendente.
+	Idéntico en espíritu a `pagos_chappsa.saldos.distribuir_monto`: un crédito
+	marcado con `aplicar` = 1 aporta fondos solo hasta lo necesario para cubrir
+	los cargos.
 	"""
 	monto = flt(monto_disponible, 2)
 	filas = [dict(d) for d in documentos]
@@ -307,7 +256,6 @@ def distribuir_monto(documentos, monto_disponible):
 	total_cargos = flt(sum(flt(f["saldo_anterior"]) for f in cargos), 2)
 	faltante = flt(max(total_cargos - monto, 0.0), 2)
 
-	# 1) Los créditos seleccionados aportan fondos (abono negativo), acotados a lo que falta.
 	fondos = monto
 	for fila in creditos:
 		if not fila.get("aplicar") or faltante <= TOLERANCIA:
@@ -318,7 +266,6 @@ def distribuir_monto(documentos, monto_disponible):
 		faltante = flt(faltante - usar, 2)
 		fondos = flt(fondos + usar, 2)
 
-	# 2) Repartir en los cargos, del más antiguo al más reciente.
 	for fila in cargos:
 		if fondos <= TOLERANCIA:
 			fila["abono"] = 0.0

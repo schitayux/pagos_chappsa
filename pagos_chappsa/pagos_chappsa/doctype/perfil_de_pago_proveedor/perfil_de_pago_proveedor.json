@@ -2,8 +2,8 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:usuario",
- "creation": "2026-08-29 00:00:00.000000",
- "description": "Define qué puede hacer cada cobrador en el módulo de Pagos y sobre qué documentos.",
+ "creation": "2026-09-15 00:00:00.000000",
+ "description": "Define qué puede hacer cada usuario en el módulo de Pagos a Proveedores y sobre qué documentos.",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -25,10 +25,8 @@
   "permitir_pagos_parciales",
   "col_break_reglas",
   "permitir_anticipos",
-  "sec_origen",
+  "sec_global",
   "es_global",
-  "col_break_origen",
-  "origen",
   "sec_reportes",
   "permitir_reporte_recibos",
   "permitir_estado_cuenta_resumen",
@@ -62,11 +60,11 @@
  ],
  "fields": [
   {
-   "description": "Vacío solo se permite en el perfil marcado como Global, cuando ese perfil es puramente la configuración del sistema y no el de un cobrador.",
+   "description": "Vacío solo se permite en el perfil marcado como Global, cuando ese perfil es puramente la configuración del sistema y no el de un usuario en particular.",
    "fieldname": "usuario",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Usuario cobrador",
+   "label": "Usuario",
    "mandatory_depends_on": "eval:!doc.es_global",
    "options": "User",
    "set_only_once": 1,
@@ -90,14 +88,14 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Habilitado",
-   "description": "Si se desactiva, el usuario no puede registrar pagos aunque tenga el rol."
+   "description": "Si se desactiva, el usuario no puede registrar pagos a proveedores aunque tenga el rol."
   },
   {
-   "description": "Correlativo propio de este cobrador. Debe llevar almohadillas, por ejemplo <code>REC-JV-.YYYY.-.#####</code>",
+   "description": "Correlativo propio de este usuario. Debe llevar almohadillas, por ejemplo <code>PP-JV-.YYYY.-.#####</code>",
    "fieldname": "serie_recibo",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Serie de recibo",
+   "label": "Serie de comprobante",
    "mandatory_depends_on": "eval:doc.usuario"
   },
   {
@@ -116,13 +114,13 @@
    "fieldname": "permitir_validar_pagos",
    "fieldtype": "Check",
    "label": "Permite validar pagos",
-   "description": "Desactivado = el cobrador solo puede dejar borradores para que otro los valide."
+   "description": "Desactivado = el usuario solo puede dejar borradores para que otro los valide."
   },
   {
    "default": "1",
    "fieldname": "permitir_reimpresion_recibo",
    "fieldtype": "Check",
-   "label": "Permite reimprimir recibo"
+   "label": "Permite reimprimir comprobante"
   },
   {
    "fieldname": "col_break_permisos",
@@ -143,7 +141,7 @@
   {
    "fieldname": "sec_reglas",
    "fieldtype": "Section Break",
-   "label": "Reglas de cobro"
+   "label": "Reglas de pago"
   },
   {
    "default": "1",
@@ -161,38 +159,24 @@
    "fieldname": "permitir_anticipos",
    "fieldtype": "Check",
    "label": "Permite manejo de anticipos",
-   "description": "Desactivado = no puede dejar excedente ni aplicar créditos del cliente."
+   "description": "Desactivado = no puede dejar excedente ni aplicar créditos del proveedor."
   },
   {
-   "fieldname": "sec_origen",
+   "fieldname": "sec_global",
    "fieldtype": "Section Break",
-   "label": "Origen de facturación (configuración global)"
+   "label": "Configuración global"
   },
   {
    "default": "0",
-   "description": "Solo puede haber UN perfil marcado como Global en todo el sistema. Su Origen determina, para todos los cobradores y empresas, si el módulo cobra contra Notas de Entrega o contra Facturas de Venta, y activa la integración con pagos nativos de ERPNext.",
+   "description": "Solo puede haber UN perfil marcado como Global en todo el sistema. Activa, para todos los usuarios y empresas, la integración de Pagos a Proveedores con pagos nativos de ERPNext contra Factura de Compra, y es donde se configuran las cuentas contables por forma de pago (pestaña «Cuentas contables»).",
    "fieldname": "es_global",
    "fieldtype": "Check",
    "label": "Global"
   },
   {
-   "fieldname": "col_break_origen",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "Nota de Entrega",
-   "depends_on": "eval:doc.es_global",
-   "description": "Nota de Entrega: la nota sigue siendo el documento que se cobra; al facturarla (1 factura por 1 nota) se aplica retroactivamente el pago nativo. Factura de Venta: cada Pago Cliente validado aplica de inmediato un pago nativo en ERPNext.",
-   "fieldname": "origen",
-   "fieldtype": "Select",
-   "label": "Origen",
-   "mandatory_depends_on": "eval:doc.es_global",
-   "options": "Nota de Entrega\nFactura de Venta"
-  },
-  {
    "fieldname": "sec_empresas",
    "fieldtype": "Section Break",
-   "label": "Empresas que puede cobrar"
+   "label": "Empresas que puede pagar"
   },
   {
    "default": "1",
@@ -210,8 +194,8 @@
   {
    "fieldname": "sec_bodegas",
    "fieldtype": "Section Break",
-   "label": "Bodegas cuyos documentos puede cobrar",
-   "description": "Solo verá notas de entrega que despachen desde estas bodegas."
+   "label": "Bodegas cuyos documentos puede pagar",
+   "description": "Solo verá facturas de compra cuyos ítems reciban en estas bodegas."
   },
   {
    "default": "1",
@@ -242,7 +226,7 @@
    "default": "1",
    "fieldname": "permitir_reporte_recibos",
    "fieldtype": "Check",
-   "label": "Recibos emitidos por estado"
+   "label": "Pagos emitidos por estado"
   },
   {
    "default": "1",
@@ -262,7 +246,7 @@
   },
   {
    "depends_on": "eval:doc.es_global",
-   "description": "Solo aplica en el perfil Global: qué cuenta(s) contable(s) usa cada forma de pago al aplicar el pago nativo en ERPNext. Con una sola cuenta configurada, se asigna sola al capturar el pago; con varias, el cobrador elige entre esas opciones. Sin ninguna, se usa la cuenta por defecto del Modo de Pago.",
+   "description": "Solo aplica en el perfil Global: qué cuenta(s) contable(s) usa cada forma de pago al aplicar el pago nativo en ERPNext. Con una sola cuenta configurada, se asigna sola al capturar el pago; con varias, el usuario elige entre esas opciones. Sin ninguna, se usa la cuenta por defecto del Modo de Pago.",
    "fieldname": "tab_cuentas",
    "fieldtype": "Tab Break",
    "label": "Cuentas contables"
@@ -319,10 +303,10 @@
   },
   {
    "depends_on": "eval:doc.es_global",
-   "description": "Cuenta contable de mayor donde se registra el saldo a favor del cliente (anticipo). Algunas empresas prefieren una cuenta de pasivo distinta a la de Cuentas por Cobrar para este concepto. Con una sola cuenta configurada se asigna sola; con varias, el cobrador elige cuál usar. Sin ninguna, se usa la cuenta por cobrar normal del cliente.",
+   "description": "Cuenta contable de mayor donde se registra el saldo a favor de la empresa (anticipo entregado al proveedor). Algunas empresas prefieren una cuenta de activo distinta a la de Cuentas por Pagar para este concepto. Con una sola cuenta configurada se asigna sola; con varias, el usuario elige cuál usar. Sin ninguna, se usa la cuenta por pagar normal del proveedor.",
    "fieldname": "sec_cuentas_anticipo",
    "fieldtype": "Section Break",
-   "label": "Cuenta de anticipo (saldo a favor del cliente)"
+   "label": "Cuenta de anticipo (saldo a favor de la empresa)"
   },
   {
    "fieldname": "cuentas_anticipo",
@@ -335,7 +319,7 @@
   },
   {
    "depends_on": "eval:doc.es_global",
-   "description": "Cuenta de gastos donde se registra la porción de un pago que corresponde a comisiones o gastos bancarios (p. ej. cargos por transferencia), en vez de aplicarse al documento del cliente.",
+   "description": "Cuenta de gastos donde se registra la porción de un pago que corresponde a comisiones o gastos bancarios (p. ej. cargos por transferencia), en vez de aplicarse a la factura del proveedor.",
    "fieldname": "cuenta_gastos_bancarios",
    "fieldtype": "Link",
    "label": "Cuenta de gastos bancarios",
@@ -343,7 +327,7 @@
   },
   {
    "depends_on": "eval:doc.es_global",
-   "description": "Cuentas donde se registra la diferencia entre el tipo de cambio real con el que el cobrador registró el pago y el tipo de cambio con el que se emitió el documento que se está pagando. Solo aplica cuando el pago toca una cuenta en moneda distinta a la de la empresa (p. ej. cobros en USD contra facturas en USD con cuenta por cobrar en GTQ).",
+   "description": "Cuentas donde se registra la diferencia entre el tipo de cambio real con el que se registró el pago y el tipo de cambio con el que se emitió el documento que se está pagando. Solo aplica cuando el pago toca una cuenta en moneda distinta a la de la empresa (p. ej. pagos en USD contra facturas en USD con cuenta por pagar en GTQ).",
    "fieldname": "sec_diferencial_cambiario",
    "fieldtype": "Section Break",
    "label": "Diferencial cambiario"
@@ -367,10 +351,10 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-29 00:00:00.000000",
+ "modified": "2026-09-15 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Pagos Chappsa",
- "name": "Perfil de Cobranza",
+ "name": "Perfil de Pago Proveedor",
  "owner": "Administrator",
  "permissions": [
   {

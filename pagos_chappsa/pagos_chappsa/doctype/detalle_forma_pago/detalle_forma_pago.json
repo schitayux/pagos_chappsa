@@ -19,6 +19,8 @@
   "cuenta_banco",
   "col_break_banco",
   "cuenta_contable",
+  "col_break_gasto",
+  "gasto_bancario",
   "sec_comentario",
   "comentario"
  ],
@@ -36,7 +38,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Tipo",
-   "options": "Efectivo\nTransferencia\nCheque\nRetención",
+   "options": "Efectivo\nTransferencia\nCheque\nRetención\nTarjeta de Crédito",
    "reqd": 1
   },
   {
@@ -95,7 +97,7 @@
    "fieldtype": "Section Break"
   },
   {
-   "depends_on": "eval:['Transferencia','Cheque'].includes(doc.tipo)",
+   "depends_on": "eval:['Transferencia','Cheque','Tarjeta de Crédito'].includes(doc.tipo)",
    "fieldname": "cuenta_banco",
    "fieldtype": "Link",
    "label": "Cuenta banco empresa",
@@ -106,13 +108,25 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Cuenta contable ligada a la cuenta bancaria. Se usará al generar el Payment Entry real.",
+   "description": "Cuenta que viajará al Payment Entry nativo. Si el perfil Global tiene una sola cuenta configurada para este tipo se asigna sola; si no, se completa desde la cuenta de banco elegida.",
    "fetch_from": "cuenta_banco.account",
+   "fetch_if_empty": 1,
    "fieldname": "cuenta_contable",
    "fieldtype": "Link",
    "label": "Cuenta contable",
-   "options": "Account",
-   "read_only": 1
+   "options": "Account"
+  },
+  {
+   "fieldname": "col_break_gasto",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:['Transferencia','Cheque','Tarjeta de Crédito'].includes(doc.tipo)",
+   "description": "Parte de esta línea que en realidad es una comisión o gasto bancario (p. ej. cargo por transferencia): NO se aplica al documento del cliente/proveedor, sino a la cuenta de gastos bancarios configurada en el perfil Global.",
+   "fieldname": "gasto_bancario",
+   "fieldtype": "Currency",
+   "label": "Gasto bancario",
+   "options": "moneda"
   },
   {
    "fieldname": "sec_comentario",

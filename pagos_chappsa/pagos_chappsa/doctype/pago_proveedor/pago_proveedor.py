@@ -6,23 +6,23 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
 
-from pagos_chappsa.permisos import (
+from pagos_chappsa.permisos_proveedor import (
 	exigir_accion,
 	exigir_empresa,
 	exigir_reglas_de_pago,
 	get_perfil,
 )
-from pagos_chappsa.saldos import (
+from pagos_chappsa.saldos_proveedor import (
 	TIPO_ANTICIPO,
 	TOLERANCIA,
 	get_abonos,
+	get_activo_global,
 	get_config,
-	get_origen_global,
 	get_saldo_documento,
 )
 
 
-class PagoCliente(Document):
+class PagoProveedor(Document):
 	# ------------------------------------------------------------------
 	# Ciclo de vida
 	# ------------------------------------------------------------------
@@ -32,7 +32,6 @@ class PagoCliente(Document):
 		exigir_accion("guardar_borrador")
 
 	def before_naming(self):
-		# Cada cobrador lleva su propio correlativo, definido en su Perfil de Cobranza.
 		perfil = get_perfil(self.cobrador or frappe.session.user)
 		if perfil.serie_recibo:
 			self.naming_series = perfil.serie_recibo
@@ -49,15 +48,10 @@ class PagoCliente(Document):
 		self.set_estado()
 
 	def before_update_after_submit(self):
-		# validate() no se ejecuta al editar campos allow_on_submit; sin esto el
-		# No. de recibo podría corregirse a un valor vacío o repetido.
 		self.validar_recibo_manual()
 
 	def before_submit(self):
 		exigir_accion("validar")
-		# Las reglas de negocio (parciales, anticipos) se exigen al VALIDAR, no al
-		# guardar: el reparto automático deja casi siempre la última nota parcial,
-		# y bloquear eso impediría parquear un borrador a medio capturar.
 		exigir_reglas_de_pago(self)
 
 	def on_submit(self):
@@ -76,35 +70,25 @@ class PagoCliente(Document):
 		self.revertir_pago_nativo_si_corresponde()
 
 	def on_trash(self):
-		# Borrar un pago es irreversible y su propio permiso, aparte de cancelar.
 		exigir_accion("eliminar")
 		if self.docstatus == 0:
 			exigir_accion("cancelar_borrador")
 
 	# ------------------------------------------------------------------
-	# Integración nativa (Origen "Factura de Venta")
+	# Integración nativa (Factura de Compra)
 	# ------------------------------------------------------------------
 	def aplicar_pago_nativo_si_corresponde(self):
-		"""Con Origen «Factura de Venta» activo, cada pago validado aplica de
-		inmediato su Payment Entry nativo en ERPNext. Con «Nota de Entrega»
-		(o sin perfil Global) esto no hace nada: la aplicación nativa ocurre
-		después, al facturar la nota (ver pagos_chappsa.integracion_nativa).
-		"""
-		if get_origen_global() != "Factura de Venta":
+		"""Con un Perfil de Pago Proveedor Global activo, cada pago validado aplica
+		de inmediato su Payment Entry nativo en ERPNext."""
+		if not get_activo_global():
 			return
 
-		from pagos_chappsa.integracion_nativa import aplicar_pagos_nativos
+		from pagos_chappsa.integracion_nativa_proveedor import aplicar_pagos_nativos
 
 		aplicar_pagos_nativos(self)
 
 	def validar_no_revierte_consumo_anticipo_nativo(self):
-		"""Este pago pudo haber consumido el anticipo nativo de OTRO pago (canceló su
-		Payment Entry de anticipo y lo repartió en aplicado + remanente, ver
-		integracion_nativa._consumir_anticipo). Reconstruir ese cruce en reversa de
-		forma automática es demasiado frágil para un caso tan poco frecuente: se
-		exige revertirlo a mano en ERPNext antes de cancelar aquí.
-		"""
-		if get_origen_global() != "Factura de Venta":
+		if not get_activo_global():
 			return
 
 		consumio_credito = any(
@@ -113,47 +97,36 @@ class PagoCliente(Document):
 		if consumio_credito:
 			frappe.throw(
 				_(
-					"Este pago aplicó un anticipo de otro recibo contra una factura, generando Payment "
-					"Entry nativos en ERPNext. Cancelar ese cruce automáticamente no está soportado: "
-					"cancele a mano en ERPNext el Payment Entry que quedó aplicado a la factura y "
-					"restaure el anticipo original antes de cancelar este pago."
+					"Este pago aplicó un anticipo de otro comprobante contra una factura, generando "
+					"Payment Entry nativos en ERPNext. Cancelar ese cruce automáticamente no está "
+					"soportado: cancele a mano en ERPNext el Payment Entry que quedó aplicado a la "
+					"factura y restaure el anticipo original antes de cancelar este pago."
 				)
 			)
 
 	def revertir_pago_nativo_si_corresponde(self):
-		"""Al cancelar, revierte los Payment Entry nativos que este pago generó.
-
-		`validar_anticipo_no_consumido` (before_cancel) ya garantiza que si este
-		pago dejó un anticipo, nadie más lo ha usado todavía — así que siempre es
-		seguro cancelar aquí todo lo que quedó atado a este pago.
-		"""
-		if get_origen_global() != "Factura de Venta":
+		"""`validar_anticipo_no_consumido` (before_cancel) ya garantiza que si este
+		pago dejó un anticipo, nadie más lo ha usado todavía."""
+		if not get_activo_global():
 			return
 
-		from pagos_chappsa.integracion_nativa import revertir_pagos_nativos
+		from pagos_chappsa.integracion_nativa_proveedor import revertir_pagos_nativos
 
 		revertir_pagos_nativos(self)
 
 	def validar_recibo_manual(self):
-		"""No. del recibo físico entregado al cliente: obligatorio y sin repetir.
-
-		La unicidad se comprueba aquí y no con un índice único de base de datos a
-		propósito: un pago cancelado libera su número (el recibo físico se anula y
-		se vuelve a emitir), y una enmienda debe poder conservar el mismo número
-		que el original cancelado.
-		"""
 		self.no_recibo_manual = (self.no_recibo_manual or "").strip()
 
 		if not self.no_recibo_manual:
 			frappe.throw(
-				_("Ingrese el No. del recibo manual que se le entrega al cliente."),
-				title=_("Falta el No. de recibo"),
+				_("Ingrese el No. del comprobante de pago que respalda esta transacción."),
+				title=_("Falta el No. de comprobante"),
 			)
 
 		duplicado = frappe.db.sql(
 			"""
-			select name, cliente, fecha
-			from `tabPago Cliente`
+			select name, proveedor, fecha
+			from `tabPago Proveedor`
 			where no_recibo_manual = %(no_recibo)s
 			  and name != %(name)s
 			  and docstatus < 2
@@ -166,21 +139,21 @@ class PagoCliente(Document):
 			otro = duplicado[0]
 			frappe.throw(
 				_(
-					"El No. de recibo {0} ya se usó en el pago {1} (cliente {2}, fecha {3}). "
-					"Cada recibo manual se registra una sola vez."
+					"El No. de comprobante {0} ya se usó en el pago {1} (proveedor {2}, fecha {3}). "
+					"Cada comprobante se registra una sola vez."
 				).format(
 					frappe.bold(self.no_recibo_manual),
 					frappe.bold(otro.name),
-					otro.cliente,
+					otro.proveedor,
 					frappe.format(otro.fecha, {"fieldtype": "Date"}),
 				),
-				title=_("No. de recibo repetido"),
+				title=_("No. de comprobante repetido"),
 			)
 
 	def validar_tipo_cambio(self):
 		"""El tipo de cambio real solo es obligatorio cuando este pago toca una
-		cuenta en moneda distinta a la de la empresa (p. ej. cobros en USD cuya
-		cuenta por cobrar está en GTQ): sin él no hay forma de calcular el
+		cuenta en moneda distinta a la de la empresa (p. ej. pagos en USD cuya
+		cuenta por pagar está en GTQ): sin él no hay forma de calcular el
 		diferencial cambiario contra el documento que se está pagando."""
 		self.tipo_cambio = flt(self.tipo_cambio)
 		if not self.empresa or not self.moneda:
@@ -191,14 +164,12 @@ class PagoCliente(Document):
 			frappe.throw(
 				_(
 					"Este pago está en {0} y la empresa {1} maneja {2}: indique el tipo de cambio real "
-					"con el que se recibió este pago."
+					"con el que se realizó este pago."
 				).format(self.moneda, frappe.bold(self.empresa), moneda_empresa),
 				title=_("Falta el tipo de cambio"),
 			)
 
 	def validar_permisos(self):
-		# El alcance por empresa sí es una frontera dura: ni siquiera se borronea
-		# un pago de una empresa que el cobrador no tiene asignada.
 		exigir_empresa(self.empresa)
 
 	# ------------------------------------------------------------------
@@ -218,10 +189,8 @@ class PagoCliente(Document):
 			if not fila.fecha:
 				fila.fecha = self.fecha
 			if fila.tipo == "Efectivo":
-				# El efectivo no lleva cuenta de banco de la empresa ni documento de
-				# respaldo. cuenta_contable sí se conserva: es la caja (posiblemente
-				# en otra moneda, p.ej. USD) que el perfil Global configuró para
-				# Efectivo, y la usa la integración nativa (pagos_chappsa.integracion_nativa).
+				# cuenta_contable sí se conserva: es la caja que el perfil Global
+				# configuró para Efectivo (ver integracion_nativa_proveedor).
 				fila.cuenta_banco = None
 				fila.banco = None
 
@@ -256,15 +225,15 @@ class PagoCliente(Document):
 			self.validar_rango_abono(fila)
 
 	def validar_pertenencia(self, fila):
-		"""El documento debe ser del mismo cliente, empresa y moneda que el pago."""
+		"""El documento debe ser del mismo proveedor, empresa y moneda que el pago."""
 		if fila.tipo_documento == TIPO_ANTICIPO:
-			campos = ["cliente", "empresa", "moneda", "docstatus"]
+			campos = ["proveedor", "empresa", "moneda", "docstatus"]
 			datos = frappe.db.get_value(TIPO_ANTICIPO, fila.documento, campos, as_dict=True)
 			if not datos:
 				frappe.throw(_("El anticipo {0} no existe.").format(fila.documento))
 			if datos.docstatus != 1:
 				frappe.throw(_("El anticipo {0} no está validado.").format(frappe.bold(fila.documento)))
-			cliente, empresa, moneda = datos.cliente, datos.empresa, datos.moneda
+			proveedor, empresa, moneda = datos.proveedor, datos.empresa, datos.moneda
 			if fila.documento == self.name:
 				frappe.throw(_("Un pago no puede aplicarse su propio anticipo."))
 		else:
@@ -272,7 +241,7 @@ class PagoCliente(Document):
 			datos = frappe.db.get_value(
 				fila.tipo_documento,
 				fila.documento,
-				[cfg["cliente"], cfg["empresa"], cfg["moneda"], "docstatus"],
+				[cfg["proveedor"], cfg["empresa"], cfg["moneda"], "docstatus"],
 				as_dict=True,
 			)
 			if not datos:
@@ -283,14 +252,14 @@ class PagoCliente(Document):
 						frappe.bold(fila.documento)
 					)
 				)
-			cliente = datos.get(cfg["cliente"])
+			proveedor = datos.get(cfg["proveedor"])
 			empresa = datos.get(cfg["empresa"])
 			moneda = datos.get(cfg["moneda"])
 
-		if cliente != self.cliente:
+		if proveedor != self.proveedor:
 			frappe.throw(
-				_("El documento {0} pertenece al cliente {1}, no a {2}.").format(
-					frappe.bold(fila.documento), cliente, self.cliente
+				_("El documento {0} pertenece al proveedor {1}, no a {2}.").format(
+					frappe.bold(fila.documento), proveedor, self.proveedor
 				)
 			)
 		if empresa != self.empresa:
@@ -322,7 +291,6 @@ class PagoCliente(Document):
 					)
 				)
 		else:
-			# Crédito: saldo y abono son negativos (dinero a favor del cliente).
 			if abono > TOLERANCIA:
 				frappe.throw(
 					_("Fila {0} ({1}): un crédito solo puede aplicarse con signo negativo.").format(
@@ -403,9 +371,10 @@ class PagoCliente(Document):
 
 		# El gasto bancario que el usuario asignó explícitamente en una forma de
 		# pago ya tiene destino propio (la cuenta de gastos bancarios del perfil
-		# Global): no es dinero suelto y no debe contarse como excedente/anticipo
-		# pendiente de reconciliar. Solo se vuelve anticipo lo que el usuario
-		# deja sin asignar a ningún documento NI a gasto bancario.
+		# Global, ver integracion_nativa_proveedor._aplicar_gasto_bancario): no
+		# es dinero suelto y no debe contarse como excedente/anticipo pendiente
+		# de reconciliar. Solo se vuelve anticipo lo que el usuario deja sin
+		# asignar a ningún documento NI a gasto bancario.
 		total_gasto_bancario = flt(sum(flt(f.gasto_bancario) for f in self.detalle_formas_pago), 2)
 		self.excedente = flt(
 			self.monto_recibido - (self.total_aplicado - self.total_creditos_aplicados) - total_gasto_bancario, 2
@@ -416,7 +385,6 @@ class PagoCliente(Document):
 		self.set_anticipo_consumido()
 
 	def set_anticipo_consumido(self):
-		"""Cuánto del excedente de ESTE pago ya fue usado por otros pagos validados."""
 		consumido = 0.0
 		if not self.is_new():
 			abonos = get_abonos([(TIPO_ANTICIPO, self.name)], excluir_pago=self.name)
@@ -424,7 +392,6 @@ class PagoCliente(Document):
 
 		self.anticipo_aplicado = flt(consumido, 2)
 		if self.docstatus == 2:
-			# Un pago cancelado no deja anticipo disponible.
 			self.anticipo_disponible = 0.0
 		else:
 			self.anticipo_disponible = flt(max(flt(self.excedente) - self.anticipo_aplicado, 0.0), 2)
@@ -434,19 +401,19 @@ class PagoCliente(Document):
 	# ------------------------------------------------------------------
 	def validar_cuadre(self):
 		if not self.detalle_documentos and flt(self.monto_recibido) <= 0:
-			frappe.throw(_("Ingrese un monto a recibir o aplique al menos un documento."))
+			frappe.throw(_("Ingrese un monto a pagar o aplique al menos un documento."))
 
 		if flt(self.excedente) < -TOLERANCIA:
 			frappe.throw(
 				_(
-					"Se está aplicando más de lo recibido: faltan {0} de fondos. "
-					"Aumente el monto recibido o aplique un anticipo/devolución del cliente."
+					"Se está aplicando más de lo pagado: faltan {0} de fondos. "
+					"Aumente el monto pagado o aplique un anticipo/nota de crédito del proveedor."
 				).format(abs(flt(self.excedente)))
 			)
 
 		if abs(flt(self.total_formas_pago) - flt(self.monto_recibido)) > TOLERANCIA:
 			frappe.throw(
-				_("Las formas de pago suman {0} y el monto recibido es {1}. Deben coincidir.").format(
+				_("Las formas de pago suman {0} y el monto pagado es {1}. Deben coincidir.").format(
 					flt(self.total_formas_pago), flt(self.monto_recibido)
 				)
 			)
@@ -473,7 +440,6 @@ class PagoCliente(Document):
 			)
 
 	def refrescar_anticipos(self):
-		"""Actualiza los campos de anticipo de este pago y de los anticipos que consumió."""
 		self.set_anticipo_consumido()
 		self.db_set("anticipo_aplicado", self.anticipo_aplicado, update_modified=False)
 		self.db_set("anticipo_disponible", self.anticipo_disponible, update_modified=False)
@@ -485,7 +451,7 @@ class PagoCliente(Document):
 
 
 def actualizar_anticipo(nombre_pago):
-	"""Recalcula anticipo_aplicado / anticipo_disponible de un Pago Cliente."""
+	"""Recalcula anticipo_aplicado / anticipo_disponible de un Pago Proveedor."""
 	excedente = flt(frappe.db.get_value(TIPO_ANTICIPO, nombre_pago, "excedente"))
 	consumido = -flt(get_abonos([(TIPO_ANTICIPO, nombre_pago)]).get((TIPO_ANTICIPO, nombre_pago), 0.0))
 	disponible = flt(max(excedente - consumido, 0.0), 2)

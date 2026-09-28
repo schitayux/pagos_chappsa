@@ -1,30 +1,30 @@
 # Copyright (c) 2026, Josue Velasquez and contributors
 # For license information, please see license.txt
-"""Endpoints usados por la página "Pagos".
+"""Endpoints usados por la página "Pagos a Proveedores".
 
-Ruta punteada: pagos_chappsa.api.pagos.<funcion>
+Ruta punteada: pagos_chappsa.api.pagos_proveedor.<funcion>
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate, nowdate
 
-from pagos_chappsa.permisos import exigir_accion, exigir_cliente_visible, get_perfil
-from pagos_chappsa.saldos import (
-	get_config,
-	get_tipo_activo,
+from pagos_chappsa.permisos_proveedor import exigir_accion, exigir_proveedor_visible, get_perfil
+from pagos_chappsa.saldos_proveedor import (
+	TIPO_ACTIVO,
 	TOLERANCIA,
 	distribuir_monto,
+	get_config,
 	get_documentos_pendientes,
 )
 
-DOCTYPE_PAGO = "Pago Cliente"
-FORMATO_RECIBO = "Recibo de Pago"
+DOCTYPE_PAGO = "Pago Proveedor"
+FORMATO_RECIBO = "Recibo de Pago a Proveedor"
 
 
 def _validar_lectura():
 	if not frappe.has_permission(DOCTYPE_PAGO, "read"):
-		frappe.throw(_("No tiene permiso para consultar pagos."), frappe.PermissionError)
+		frappe.throw(_("No tiene permiso para consultar pagos a proveedores."), frappe.PermissionError)
 
 
 # ---------------------------------------------------------------------------
@@ -43,21 +43,22 @@ def get_contexto():
 
 	perfil = get_perfil()
 
-	from pagos_chappsa.integracion_nativa import TIPO_A_CAMPO_CUENTAS, get_cuentas_anticipo_configuradas, get_cuentas_configuradas
+	from pagos_chappsa.integracion_nativa_proveedor import (
+		TIPO_A_CAMPO_CUENTAS,
+		get_cuenta_gastos_bancarios,
+		get_cuentas_anticipo_configuradas,
+		get_cuentas_configuradas,
+	)
 
 	cuentas_por_forma = {tipo: get_cuentas_configuradas(tipo) for tipo in TIPO_A_CAMPO_CUENTAS}
 
 	return {
 		"empresas": empresas,
 		"formas_pago": formas_pago,
-		"tipos_activos": [get_tipo_activo()],
+		"tipos_activos": [TIPO_ACTIVO],
 		"cuentas_por_forma": cuentas_por_forma,
 		"cuentas_anticipo": get_cuentas_anticipo_configuradas(),
-		# Gasto bancario aún no soportado del lado "Receive": ERPNext sincroniza el
-		# monto recibido en banco con el aplicado cuando comparten moneda, así que
-		# no hay forma limpia de separar la comisión sin generar un anticipo
-		# ficticio (ver pagos_chappsa.integracion_nativa._aplicar_gasto_bancario).
-		"permite_gasto_bancario": False,
+		"permite_gasto_bancario": bool(get_cuenta_gastos_bancarios()),
 		"hoy": nowdate(),
 		"formato_recibo": FORMATO_RECIBO,
 		"puede_crear": frappe.has_permission(DOCTYPE_PAGO, "create") and bool(perfil.permitir_guardar_borradores),
@@ -77,15 +78,10 @@ def get_contexto():
 
 @frappe.whitelist()
 def get_monedas_con_documentos():
-	"""Monedas que realmente aparecen en documentos, para no ofrecer las 148 del catálogo.
-
-	Se consultan los tipos activos y los pagos ya registrados. Son códigos de moneda,
-	no datos del negocio, así que basta con una consulta directa.
-	"""
 	_validar_lectura()
 
 	monedas = set()
-	for tipo in [get_tipo_activo()]:
+	for tipo in [TIPO_ACTIVO]:
 		cfg = get_config(tipo)
 		filas = frappe.db.sql(
 			"select distinct `{campo}` from `tab{tipo}` where docstatus = 1".format(
@@ -94,7 +90,7 @@ def get_monedas_con_documentos():
 		)
 		monedas.update(f[0] for f in filas if f[0])
 
-	filas = frappe.db.sql("select distinct moneda from `tabPago Cliente` where docstatus < 2")
+	filas = frappe.db.sql("select distinct moneda from `tabPago Proveedor` where docstatus < 2")
 	monedas.update(f[0] for f in filas if f[0])
 
 	return sorted(monedas)
@@ -125,23 +121,15 @@ def get_cuentas_banco(empresa, moneda=None):
 
 
 # ---------------------------------------------------------------------------
-# Documentos pendientes del cliente
+# Documentos pendientes del proveedor
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
-def get_documentos(cliente, empresa=None, moneda=None, pago=None):
-	"""Todo el saldo del cliente, agrupado en "cuentas" (empresa + moneda).
-
-	La página solo exige el cliente: aquí se calcula en qué empresas y monedas tiene
-	saldo y se elige sola la cuenta con mayor saldo pendiente. Si el cliente solo
-	tiene saldo en un lado —el caso normal— el usuario no elige nada.
-	"""
+def get_documentos(proveedor, empresa=None, moneda=None, pago=None):
+	"""Todo el saldo del proveedor, agrupado en "cuentas" (empresa + moneda)."""
 	_validar_lectura()
-	# El desplegable de cliente ya filtra por permisos, pero la API es alcanzable
-	# directamente: hay que revalidar aquí o la restricción sería solo cosmética.
-	exigir_cliente_visible(cliente)
+	exigir_proveedor_visible(proveedor)
 
-	# Una sola consulta trae todo; el agrupado y el filtrado se hacen en memoria.
-	todos = get_documentos_pendientes(cliente, excluir_pago=pago)
+	todos = get_documentos_pendientes(proveedor, excluir_pago=pago)
 
 	abreviaturas = dict(
 		frappe.get_all("Company", fields=["name", "abbr"], limit_page_length=0, as_list=True)
@@ -166,10 +154,8 @@ def get_documentos(cliente, empresa=None, moneda=None, pago=None):
 		if d["clase"] == "Crédito":
 			cuenta["creditos"] += 1
 
-	# Mayor saldo primero: es la cuenta que el usuario casi siempre quiere cobrar.
 	lista_cuentas = sorted(cuentas.values(), key=lambda c: -abs(c["saldo"]))
 
-	# Si no se pidió una cuenta concreta (o la pedida ya no tiene saldo), se elige sola.
 	seleccionada = None
 	if empresa and moneda:
 		seleccionada = next(
@@ -182,12 +168,11 @@ def get_documentos(cliente, empresa=None, moneda=None, pago=None):
 		empresa, moneda = seleccionada["empresa"], seleccionada["moneda"]
 		documentos = [d for d in todos if d["empresa"] == empresa and d["moneda"] == moneda]
 	else:
-		# Cliente sin saldo: aun así hay que poder registrar un anticipo puro.
 		documentos = []
 		empresa = empresa or frappe.defaults.get_user_default("Company") or frappe.db.get_default("Company")
 		moneda = (
 			moneda
-			or frappe.db.get_value("Customer", cliente, "default_currency")
+			or frappe.db.get_value("Supplier", proveedor, "default_currency")
 			or frappe.db.get_value("Company", empresa, "default_currency")
 		)
 
@@ -196,13 +181,12 @@ def get_documentos(cliente, empresa=None, moneda=None, pago=None):
 		"cuentas": lista_cuentas,
 		"empresa": empresa,
 		"moneda": moneda,
-		"nombre_cliente": frappe.db.get_value("Customer", cliente, "customer_name"),
+		"nombre_proveedor": frappe.db.get_value("Supplier", proveedor, "supplier_name"),
 	}
 
 
 @frappe.whitelist()
 def distribuir(documentos, monto):
-	"""Distribución automática del más antiguo al más reciente (referencia del servidor)."""
 	_validar_lectura()
 	documentos = frappe.parse_json(documentos)
 	filas, excedente = distribuir_monto(documentos, flt(monto))
@@ -214,14 +198,12 @@ def distribuir(documentos, monto):
 # ---------------------------------------------------------------------------
 @frappe.whitelist()
 def guardar_pago(payload, validar=0):
-	"""Crea o actualiza un Pago Cliente en borrador; con validar=1 además lo valida."""
+	"""Crea o actualiza un Pago Proveedor en borrador; con validar=1 además lo valida."""
 	datos = frappe.parse_json(payload)
 	validar = int(validar or 0)
 
 	nombre = datos.get("name")
 
-	# Regla de flujo: no se valida "de una". Primero queda el borrador guardado y
-	# revisable, y la validación es una segunda acción explícita sobre ese borrador.
 	if validar and not nombre:
 		frappe.throw(
 			_("Guarde primero el pago como borrador; luego podrá validarlo."),
@@ -238,7 +220,7 @@ def guardar_pago(payload, validar=0):
 		doc = frappe.new_doc(DOCTYPE_PAGO)
 
 	doc.empresa = datos.get("empresa")
-	doc.cliente = datos.get("cliente")
+	doc.proveedor = datos.get("proveedor")
 	doc.fecha = getdate(datos.get("fecha") or nowdate())
 	doc.moneda = datos.get("moneda")
 	doc.tipo_cambio = flt(datos.get("tipo_cambio"))
@@ -297,18 +279,11 @@ def guardar_pago(payload, validar=0):
 
 @frappe.whitelist()
 def get_pago(name):
-	"""Devuelve un pago listo para recargarlo en la página.
-
-	* Borrador  -> se recalculan los saldos pendientes EXCLUYENDO este pago y se
-	               superponen sus abonos, de modo que se pueda seguir editando con
-	               saldos frescos.
-	* Validado  -> se devuelve el detalle guardado tal cual, sin recalcular: es el
-	               registro histórico y la pantalla queda en solo lectura.
-	"""
+	"""Devuelve un pago listo para recargarlo en la página."""
 	_validar_lectura()
 	doc = frappe.get_doc(DOCTYPE_PAGO, name)
 	doc.check_permission("read")
-	exigir_cliente_visible(doc.cliente)
+	exigir_proveedor_visible(doc.proveedor)
 
 	perfil = get_perfil()
 	solo_lectura = doc.docstatus != 0
@@ -317,7 +292,7 @@ def get_pago(name):
 		documentos = [
 			{
 				"tipo_documento": f.tipo_documento,
-				"etiqueta_tipo": "Anticipo" if f.tipo_documento == DOCTYPE_PAGO else "Nota de Entrega",
+				"etiqueta_tipo": "Anticipo" if f.tipo_documento == DOCTYPE_PAGO else "Factura de Compra",
 				"documento": f.documento,
 				"clase": f.clase,
 				"fecha_documento": f.fecha_documento,
@@ -334,7 +309,7 @@ def get_pago(name):
 		]
 		cuentas = []
 	else:
-		datos = get_documentos(doc.cliente, doc.empresa, doc.moneda, pago=doc.name)
+		datos = get_documentos(doc.proveedor, doc.empresa, doc.moneda, pago=doc.name)
 		documentos = datos["documentos"]
 		cuentas = datos["cuentas"]
 
@@ -345,15 +320,13 @@ def get_pago(name):
 			d["abono"] = abonos.get(clave, 0.0)
 			if clave in abonos:
 				vistos.add(clave)
-		# Un documento abonado que ya no figura como pendiente (lo saldó otro pago
-		# mientras tanto) igual debe verse, o el borrador perdería esa línea en silencio.
 		for f in doc.detalle_documentos:
 			if (f.tipo_documento, f.documento) in vistos:
 				continue
 			documentos.append(
 				{
 					"tipo_documento": f.tipo_documento,
-					"etiqueta_tipo": "Anticipo" if f.tipo_documento == DOCTYPE_PAGO else "Nota de Entrega",
+					"etiqueta_tipo": "Anticipo" if f.tipo_documento == DOCTYPE_PAGO else "Factura de Compra",
 					"documento": f.documento,
 					"clase": f.clase,
 					"fecha_documento": f.fecha_documento,
@@ -390,8 +363,8 @@ def get_pago(name):
 		"estado": doc.estado,
 		"cuenta_anticipo": doc.cuenta_anticipo or "",
 		"solo_lectura": solo_lectura,
-		"cliente": doc.cliente,
-		"nombre_cliente": doc.nombre_cliente,
+		"proveedor": doc.proveedor,
+		"nombre_proveedor": doc.nombre_proveedor,
 		"empresa": doc.empresa,
 		"moneda": doc.moneda,
 		"fecha": doc.fecha,
@@ -404,32 +377,30 @@ def get_pago(name):
 		"documentos": documentos,
 		"cuentas": cuentas,
 		"formas_pago": formas,
-		# El recibo solo existe para pagos validados: un borrador no es comprobante de nada.
 		"puede_imprimir": bool(doc.docstatus == 1 and perfil.permitir_reimpresion_recibo),
 	}
 
 
 @frappe.whitelist()
 def registrar_reimpresion(name):
-	"""Valida el permiso de reimpresión antes de abrir el recibo."""
 	exigir_accion("reimprimir")
 	docstatus = frappe.db.get_value(DOCTYPE_PAGO, name, "docstatus")
 	if docstatus != 1:
-		frappe.throw(_("Solo se puede imprimir el recibo de un pago validado."))
+		frappe.throw(_("Solo se puede imprimir el comprobante de un pago validado."))
 	return {"formato": FORMATO_RECIBO, "name": name}
 
 
 @frappe.whitelist()
 def get_payment_entries(name):
-	"""Payment Entry(s) nativos de ERPNext generados por este Pago Cliente
+	"""Payment Entry(s) nativos de ERPNext generados por este Pago Proveedor
 	(directos o de un anticipo suyo), para el botón "Ver entrada de pago"."""
 	doc = frappe.get_doc(DOCTYPE_PAGO, name)
 	doc.check_permission("read")
-	exigir_cliente_visible(doc.cliente)
+	exigir_proveedor_visible(doc.proveedor)
 
 	return frappe.get_all(
 		"Payment Entry",
-		filters={"custom_pagos_chappsa_pago_cliente": name},
+		filters={"custom_pagos_chappsa_pago_proveedor": name},
 		fields=["name", "docstatus"],
 		order_by="creation",
 	)
@@ -437,15 +408,9 @@ def get_payment_entries(name):
 
 @frappe.whitelist()
 def actualizar_no_recibo(name, no_recibo):
-	"""Corrige el No. de recibo manual, incluso con el pago ya validado.
-
-	Es un dato que se transcribe a mano de un talonario físico, así que tiene que
-	poder corregirse sin cancelar el pago. El campo es allow_on_submit y el
-	documento revalida obligatoriedad y unicidad en before_update_after_submit.
-	"""
 	doc = frappe.get_doc(DOCTYPE_PAGO, name)
 	doc.check_permission("write")
-	exigir_cliente_visible(doc.cliente)
+	exigir_proveedor_visible(doc.proveedor)
 
 	if doc.docstatus == 2:
 		frappe.throw(_("El pago {0} está cancelado y ya no se puede modificar.").format(name))
@@ -457,18 +422,17 @@ def actualizar_no_recibo(name, no_recibo):
 
 
 @frappe.whitelist()
-def get_pagos_recientes(cliente=None, empresa=None, limite=20):
+def get_pagos_recientes(proveedor=None, empresa=None, limite=20):
 	"""Últimos pagos, sin importar el estado: un pago cancelado desde el page o
 	desde su Payment Entry en ERPNext debe seguir viéndose aquí (con estado
 	Cancelado), no desaparecer de la lista."""
 	_validar_lectura()
 	filtros = {}
-	if cliente:
-		filtros["cliente"] = cliente
+	if proveedor:
+		filtros["proveedor"] = proveedor
 	if empresa:
 		filtros["empresa"] = empresa
 
-	# get_list para que aplique pago_cliente_query (ver hooks.py).
 	return frappe.get_list(
 		DOCTYPE_PAGO,
 		filters=filtros,
@@ -476,8 +440,8 @@ def get_pagos_recientes(cliente=None, empresa=None, limite=20):
 			"name",
 			"no_recibo_manual",
 			"fecha",
-			"cliente",
-			"nombre_cliente",
+			"proveedor",
+			"nombre_proveedor",
 			"moneda",
 			"monto_recibido",
 			"total_aplicado",
